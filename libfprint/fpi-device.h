@@ -139,7 +139,6 @@ struct _FpDeviceClass
   const gchar     *full_name;
   FpDeviceType     type;
   const FpIdEntry *id_table;
-  FpDeviceFeature  features;
 
   /* Defaults for device properties */
   gint       nr_enroll_stages;
@@ -159,9 +158,12 @@ struct _FpDeviceClass
 
   void (*cancel)   (FpDevice *device);
 
+  /* Class elements added after tod-v1 */
+  FpDeviceFeature features;
+
   /*< private >*/
   /* padding for future expansion */
-  gpointer _padding_dummy[32];
+  gpointer _padding_dummy[31];
 };
 
 void fpi_device_class_auto_initialize_features (FpDeviceClass *device_class);
