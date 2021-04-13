@@ -16,6 +16,7 @@ libfprint_private_sources = [
     'fpi-print.c',
     'fpi-ssm.c',
     'fpi-usb-transfer.c',
+    'fpi-spi-transfer.c',
 ]
 
 libfprint_public_headers = [
@@ -40,6 +41,7 @@ libfprint_private_headers = [
     'fpi-minutiae.h',
     'fpi-print.h',
     'fpi-usb-transfer.h',
+    'fpi-spi-transfer.h',
     'fpi-ssm.h',
 ]
 
@@ -140,6 +142,9 @@ foreach driver: drivers
     if driver == 'vfs5011'
         drivers_sources += [ 'drivers/vfs5011.c' ]
     endif
+    if driver == 'vfs7552'
+        drivers_sources += [ 'drivers/vfs7552.c' ]
+    endif
     if driver == 'upektc_img'
         drivers_sources += [ 'drivers/upektc_img.c',  'drivers/upek_proto.c' ]
     endif
@@ -174,6 +179,11 @@ foreach driver: drivers
     drivers_sources += [
         'drivers/goodixmoc/goodix.c',
         'drivers/goodixmoc/goodix_proto.c',
+    ]
+    endif
+    if driver == 'nb1010'
+    drivers_sources += [
+        'drivers/nb1010.c',
     ]
     endif
 endforeach
@@ -221,6 +231,7 @@ deps = [
     glib_dep,
     gobject_dep,
     gusb_dep,
+    gudev_dep,
     imaging_dep,
     mathlib_dep,
     nss_dep,

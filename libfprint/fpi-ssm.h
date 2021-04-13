@@ -93,6 +93,7 @@ void fpi_ssm_set_data (FpiSsm        *machine,
                        gpointer       ssm_data,
                        GDestroyNotify ssm_data_destroy);
 gpointer fpi_ssm_get_data (FpiSsm *machine);
+FpDevice * fpi_ssm_get_device (FpiSsm *machine);
 GError * fpi_ssm_get_error (FpiSsm *machine);
 GError * fpi_ssm_dup_error (FpiSsm *machine);
 int fpi_ssm_get_cur_state (FpiSsm *machine);
@@ -107,6 +108,17 @@ void fpi_ssm_usb_transfer_cb (FpiUsbTransfer *transfer,
                               gpointer        unused_data,
                               GError         *error);
 void fpi_ssm_usb_transfer_with_weak_pointer_cb (FpiUsbTransfer *transfer,
+                                                FpDevice       *device,
+                                                gpointer        weak_ptr,
+                                                GError         *error);
+
+typedef struct _FpiSpiTransfer FpiSpiTransfer;
+
+void fpi_ssm_spi_transfer_cb (FpiSpiTransfer *transfer,
+                              FpDevice       *device,
+                              gpointer        unused_data,
+                              GError         *error);
+void fpi_ssm_spi_transfer_with_weak_pointer_cb (FpiSpiTransfer *transfer,
                                                 FpDevice       *device,
                                                 gpointer        weak_ptr,
                                                 GError         *error);

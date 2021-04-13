@@ -135,6 +135,10 @@ usb:v27C6p639C*
 usb:v27C6p6594*
  ID_AUTOSUSPEND=1
 
+# Supported by libfprint driver nb1010
+usb:v298Dp1010*
+ ID_AUTOSUSPEND=1
+
 # Supported by libfprint driver synaptics
 usb:v06CBp00BD*
 usb:v06CBp00E9*
@@ -143,7 +147,7 @@ usb:v06CBp00F9*
 usb:v06CBp00FC*
 usb:v06CBp00C2*
 usb:v06CBp00C9*
-usb:v06CBp00E7*
+usb:v06CBp0100*
  ID_AUTOSUSPEND=1
 
 # Supported by libfprint driver upeksonly
@@ -195,6 +199,10 @@ usb:v138Ap0017*
 usb:v138Ap0018*
  ID_AUTOSUSPEND=1
 
+# Supported by libfprint driver vfs7552
+usb:v138Ap0091*
+ ID_AUTOSUSPEND=1
+
 # Known unsupported devices
 usb:v04F3p036B*
 usb:v04F3p0C00*
@@ -202,6 +210,7 @@ usb:v04F3p0C4B*
 usb:v04F3p0C4C*
 usb:v04F3p0C4F*
 usb:v04F3p0C57*
+usb:v04F3p0C5E*
 usb:v04F3p2706*
 usb:v06CBp0081*
 usb:v06CBp0088*
@@ -212,13 +221,18 @@ usb:v06CBp00A2*
 usb:v06CBp00B7*
 usb:v06CBp00BB*
 usb:v06CBp00BE*
+usb:v06CBp00C4*
 usb:v06CBp00CB*
 usb:v06CBp00D8*
 usb:v06CBp00DA*
 usb:v0A5Cp5801*
 usb:v0A5Cp5805*
 usb:v0A5Cp5834*
+usb:v0A5Cp5840*
+usb:v0A5Cp5841*
+usb:v0A5Cp5842*
 usb:v0A5Cp5843*
+usb:v0A5Cp5845*
 usb:v10A5p0007*
 usb:v1188p9545*
 usb:v138Ap0007*
@@ -227,7 +241,6 @@ usb:v138Ap003C*
 usb:v138Ap003D*
 usb:v138Ap003F*
 usb:v138Ap0090*
-usb:v138Ap0091*
 usb:v138Ap0092*
 usb:v138Ap0094*
 usb:v138Ap0097*

@@ -50,6 +50,8 @@ enum {
   PROP_FINGER_STATUS,
   PROP_FPI_ENVIRON,
   PROP_FPI_USB_DEVICE,
+  PROP_FPI_UDEV_DATA_SPIDEV,
+  PROP_FPI_UDEV_DATA_HIDRAW,
   PROP_FPI_DRIVER_DATA,
   N_PROPS
 };
@@ -138,6 +140,8 @@ fp_device_constructed (GObject *object)
   FpDeviceClass *cls = FP_DEVICE_GET_CLASS (self);
   FpDevicePrivate *priv = fp_device_get_instance_private (self);
 
+  g_assert (cls->features != FP_DEVICE_FEATURE_NONE);
+
   priv->type = cls->type;
   if (cls->nr_enroll_stages)
     priv->nr_enroll_stages = cls->nr_enroll_stages;
@@ -169,6 +173,8 @@ fp_device_finalize (GObject *object)
 
   g_clear_object (&priv->usb_device);
   g_clear_pointer (&priv->virtual_env, g_free);
+  g_clear_pointer (&priv->udev_data.spidev_path, g_free);
+  g_clear_pointer (&priv->udev_data.hidraw_path, g_free);
 
   G_OBJECT_CLASS (fp_device_parent_class)->finalize (object);
 }
@@ -246,6 +252,20 @@ fp_device_set_property (GObject      *object,
         priv->usb_device = g_value_dup_object (value);
       else
         g_assert (g_value_get_object (value) == NULL);
+      break;
+
+    case PROP_FPI_UDEV_DATA_SPIDEV:
+      if (cls->type == FP_DEVICE_TYPE_UDEV)
+        priv->udev_data.spidev_path = g_value_dup_string (value);
+      else
+        g_assert (g_value_get_string (value) == NULL);
+      break;
+
+    case PROP_FPI_UDEV_DATA_HIDRAW:
+      if (cls->type == FP_DEVICE_TYPE_UDEV)
+        priv->udev_data.hidraw_path = g_value_dup_string (value);
+      else
+        g_assert (g_value_get_string (value) == NULL);
       break;
 
     case PROP_FPI_DRIVER_DATA:
@@ -425,6 +445,32 @@ fp_device_class_init (FpDeviceClass *klass)
                          "Private: The USB device for the device",
                          G_USB_TYPE_DEVICE,
                          G_PARAM_STATIC_STRINGS | G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY);
+  /**
+   * FpDevice::fpi-udev-data-spidev: (skip)
+   *
+   * This property is only for internal purposes.
+   *
+   * Stability: private
+   */
+  properties[PROP_FPI_UDEV_DATA_SPIDEV] =
+    g_param_spec_string ("fpi-udev-data-spidev",
+                         "Udev data: spidev path",
+                         "Private: The path to /dev/spidevN.M",
+                         NULL,
+                         G_PARAM_STATIC_STRINGS | G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY);
+  /**
+   * FpDevice::fpi-udev-data-hidraw: (skip)
+   *
+   * This property is only for internal purposes.
+   *
+   * Stability: private
+   */
+  properties[PROP_FPI_UDEV_DATA_HIDRAW] =
+    g_param_spec_string ("fpi-udev-data-hidraw",
+                         "Udev data: hidraw path",
+                         "Private: The path to /dev/hidrawN",
+                         NULL,
+                         G_PARAM_STATIC_STRINGS | G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY);
 
   /**
    * FpDevice::fpi-driver-data: (skip)
@@ -575,6 +621,7 @@ fp_device_get_nr_enroll_stages (FpDevice *device)
  * Check whether the device supports identification.
  *
  * Returns: Whether the device supports identification
+ * Deprecated: 1.92.0: Use fp_device_has_feature() instead.
  */
 gboolean
 fp_device_supports_identify (FpDevice *device)
@@ -583,7 +630,7 @@ fp_device_supports_identify (FpDevice *device)
 
   g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
 
-  return cls->identify != NULL;
+  return cls->identify && !!(cls->features & FP_DEVICE_FEATURE_IDENTIFY);
 }
 
 /**
@@ -593,6 +640,7 @@ fp_device_supports_identify (FpDevice *device)
  * Check whether the device supports capturing images.
  *
  * Returns: Whether the device supports image capture
+ * Deprecated: 1.92.0: Use fp_device_has_feature() instead.
  */
 gboolean
 fp_device_supports_capture (FpDevice *device)
@@ -601,7 +649,7 @@ fp_device_supports_capture (FpDevice *device)
 
   g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
 
-  return cls->capture != NULL;
+  return cls->capture && !!(cls->features & FP_DEVICE_FEATURE_CAPTURE);
 }
 
 /**
@@ -612,6 +660,7 @@ fp_device_supports_capture (FpDevice *device)
  * prints stored on the with fp_device_list_prints() and you should
  * always delete prints from the device again using
  * fp_device_delete_print().
+ * Deprecated: 1.92.0: Use fp_device_has_feature() instead.
  */
 gboolean
 fp_device_has_storage (FpDevice *device)
@@ -620,7 +669,7 @@ fp_device_has_storage (FpDevice *device)
 
   g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
 
-  return cls->list != NULL;
+  return !!(cls->features & FP_DEVICE_FEATURE_STORAGE);
 }
 
 /**
@@ -673,6 +722,7 @@ fp_device_open (FpDevice           *device,
       break;
 
     case FP_DEVICE_TYPE_VIRTUAL:
+    case FP_DEVICE_TYPE_UDEV:
       break;
 
     default:
@@ -908,6 +958,7 @@ fp_device_verify (FpDevice           *device,
 {
   g_autoptr(GTask) task = NULL;
   FpDevicePrivate *priv = fp_device_get_instance_private (device);
+  FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
   FpMatchData *data;
 
   task = g_task_new (device, cancellable, callback, user_data);
@@ -928,6 +979,14 @@ fp_device_verify (FpDevice           *device,
       return;
     }
 
+  if (!cls->verify || !(cls->features & FP_DEVICE_FEATURE_VERIFY))
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                                     "Device has no verification support"));
+      return;
+    }
+
   priv->current_action = FPI_DEVICE_ACTION_VERIFY;
   priv->current_task = g_steal_pointer (&task);
   maybe_cancel_on_cancelled (device, cancellable);
@@ -941,7 +1000,7 @@ fp_device_verify (FpDevice           *device,
   // Attach the match data as task data so that it is destroyed
   g_task_set_task_data (priv->current_task, data, (GDestroyNotify) match_data_free);
 
-  FP_DEVICE_GET_CLASS (device)->verify (device);
+  cls->verify (device);
 }
 
 /**
@@ -1017,6 +1076,7 @@ fp_device_identify (FpDevice           *device,
 {
   g_autoptr(GTask) task = NULL;
   FpDevicePrivate *priv = fp_device_get_instance_private (device);
+  FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
   FpMatchData *data;
   int i;
 
@@ -1035,6 +1095,14 @@ fp_device_identify (FpDevice           *device,
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
+      return;
+    }
+
+  if (!cls->identify || !(cls->features & FP_DEVICE_FEATURE_IDENTIFY))
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                                     "Device has not identification support"));
       return;
     }
 
@@ -1057,7 +1125,7 @@ fp_device_identify (FpDevice           *device,
   // Attach the match data as task data so that it is destroyed
   g_task_set_task_data (priv->current_task, data, (GDestroyNotify) match_data_free);
 
-  FP_DEVICE_GET_CLASS (device)->identify (device);
+  cls->identify (device);
 }
 
 /**
@@ -1127,6 +1195,7 @@ fp_device_capture (FpDevice           *device,
 {
   g_autoptr(GTask) task = NULL;
   FpDevicePrivate *priv = fp_device_get_instance_private (device);
+  FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
 
   task = g_task_new (device, cancellable, callback, user_data);
   if (g_task_return_error_if_cancelled (task))
@@ -1146,13 +1215,21 @@ fp_device_capture (FpDevice           *device,
       return;
     }
 
+  if (!cls->capture || !(cls->features & FP_DEVICE_FEATURE_CAPTURE))
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                                     "Device has no verification support"));
+      return;
+    }
+
   priv->current_action = FPI_DEVICE_ACTION_CAPTURE;
   priv->current_task = g_steal_pointer (&task);
   maybe_cancel_on_cancelled (device, cancellable);
 
   priv->wait_for_finger = wait_for_finger;
 
-  FP_DEVICE_GET_CLASS (device)->capture (device);
+  cls->capture (device);
 }
 
 /**
@@ -1201,6 +1278,7 @@ fp_device_delete_print (FpDevice           *device,
 {
   g_autoptr(GTask) task = NULL;
   FpDevicePrivate *priv = fp_device_get_instance_private (device);
+  FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
 
   task = g_task_new (device, cancellable, callback, user_data);
   if (g_task_return_error_if_cancelled (task))
@@ -1221,7 +1299,7 @@ fp_device_delete_print (FpDevice           *device,
     }
 
   /* Succeed immediately if delete is not implemented. */
-  if (!FP_DEVICE_GET_CLASS (device)->delete)
+  if (!cls->delete || !(cls->features & FP_DEVICE_FEATURE_STORAGE_DELETE))
     {
       g_task_return_boolean (task, TRUE);
       return;
@@ -1235,7 +1313,7 @@ fp_device_delete_print (FpDevice           *device,
                         g_object_ref (enrolled_print),
                         g_object_unref);
 
-  FP_DEVICE_GET_CLASS (device)->delete (device);
+  cls->delete (device);
 }
 
 /**
@@ -1278,6 +1356,7 @@ fp_device_list_prints (FpDevice           *device,
 {
   g_autoptr(GTask) task = NULL;
   FpDevicePrivate *priv = fp_device_get_instance_private (device);
+  FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
 
   task = g_task_new (device, cancellable, callback, user_data);
   if (g_task_return_error_if_cancelled (task))
@@ -1297,7 +1376,7 @@ fp_device_list_prints (FpDevice           *device,
       return;
     }
 
-  if (!fp_device_has_storage (device))
+  if (!cls->list || !(cls->features & FP_DEVICE_FEATURE_STORAGE))
     {
       g_task_return_error (task,
                            fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
@@ -1309,7 +1388,7 @@ fp_device_list_prints (FpDevice           *device,
   priv->current_task = g_steal_pointer (&task);
   maybe_cancel_on_cancelled (device, cancellable);
 
-  FP_DEVICE_GET_CLASS (device)->list (device);
+  cls->list (device);
 }
 
 /**
@@ -1597,4 +1676,42 @@ fp_device_list_prints_sync (FpDevice     *device,
     g_main_context_iteration (NULL, TRUE);
 
   return fp_device_list_prints_finish (device, task, error);
+}
+
+/**
+ * fp_device_get_features:
+ * @device: a #FpDevice
+ *
+ * Gets the #FpDeviceFeature's supported by the @device.
+ *
+ * Returns: #FpDeviceFeature flags of supported features
+ */
+FpDeviceFeature
+fp_device_get_features (FpDevice *device)
+{
+  g_return_val_if_fail (FP_IS_DEVICE (device), FP_DEVICE_FEATURE_NONE);
+
+  return FP_DEVICE_GET_CLASS (device)->features;
+}
+
+/**
+ * fp_device_has_feature:
+ * @device: a #FpDevice
+ * @feature: #FpDeviceFeature flags to check against device supported features
+ *
+ * Checks if @device supports the requested #FpDeviceFeature's.
+ * See fp_device_get_features()
+ *
+ * Returns: %TRUE if supported, %FALSE otherwise
+ */
+gboolean
+fp_device_has_feature (FpDevice       *device,
+                       FpDeviceFeature feature)
+{
+  g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
+
+  if (feature == FP_DEVICE_FEATURE_NONE)
+    return fp_device_get_features (device) == feature;
+
+  return (fp_device_get_features (device) & feature) == feature;
 }

@@ -38,12 +38,38 @@ G_DECLARE_DERIVABLE_TYPE (FpDevice, fp_device, FP, DEVICE, GObject)
 /**
  * FpDeviceType:
  * @FP_DEVICE_TYPE_VIRTUAL: The device is a virtual device
+ * @FP_DEVICE_TYPE_UDEV: The device is a udev device
  * @FP_DEVICE_TYPE_USB: The device is a USB device
  */
 typedef enum {
   FP_DEVICE_TYPE_VIRTUAL,
+  FP_DEVICE_TYPE_UDEV,
   FP_DEVICE_TYPE_USB,
 } FpDeviceType;
+
+/**
+ * FpDeviceFeature:
+ * @FP_DEVICE_FEATURE_NONE: Device does not support any feature
+ * @FP_DEVICE_FEATURE_CAPTURE: Supports image capture
+ * @FP_DEVICE_FEATURE_VERIFY: Supports finger verification
+ * @FP_DEVICE_FEATURE_IDENTIFY: Supports finger identification
+ * @FP_DEVICE_FEATURE_STORAGE: Device has a persistent storage
+ * @FP_DEVICE_FEATURE_STORAGE_LIST: Supports listing the storage templates
+ * @FP_DEVICE_FEATURE_STORAGE_DELETE: Supports deleting stored templates
+ * @FP_DEVICE_FEATURE_STORAGE_CLEAR: Supports clearing the whole storage
+ * @FP_DEVICE_FEATURE_DUPLICATES_CHECK: Natively supports duplicates detection
+ */
+typedef enum /*< flags >*/ {
+  FP_DEVICE_FEATURE_NONE = 0,
+  FP_DEVICE_FEATURE_CAPTURE = 1 << 0,
+  FP_DEVICE_FEATURE_IDENTIFY = 1 << 1,
+  FP_DEVICE_FEATURE_VERIFY = 1 << 2,
+  FP_DEVICE_FEATURE_STORAGE = 1 << 3,
+  FP_DEVICE_FEATURE_STORAGE_LIST = 1 << 4,
+  FP_DEVICE_FEATURE_STORAGE_DELETE = 1 << 5,
+  FP_DEVICE_FEATURE_STORAGE_CLEAR = 1 << 6,
+  FP_DEVICE_FEATURE_DUPLICATES_CHECK = 1 << 7,
+} FpDeviceFeature;
 
 /**
  * FpScanType:
@@ -176,9 +202,9 @@ FpScanType   fp_device_get_scan_type (FpDevice *device);
 FpFingerStatusFlags fp_device_get_finger_status (FpDevice *device);
 gint         fp_device_get_nr_enroll_stages (FpDevice *device);
 
-gboolean     fp_device_supports_identify (FpDevice *device);
-gboolean     fp_device_supports_capture (FpDevice *device);
-gboolean     fp_device_has_storage (FpDevice *device);
+FpDeviceFeature     fp_device_get_features (FpDevice *device);
+gboolean            fp_device_has_feature (FpDevice       *device,
+                                           FpDeviceFeature feature);
 
 /* Opening the device */
 void fp_device_open (FpDevice           *device,
@@ -305,5 +331,12 @@ GPtrArray * fp_device_list_prints_sync (FpDevice     *device,
                                         GCancellable *cancellable,
                                         GError      **error);
 
+/* Deprecated functions */
+G_DEPRECATED_FOR (fp_device_get_features)
+gboolean     fp_device_supports_identify (FpDevice *device);
+G_DEPRECATED_FOR (fp_device_get_features)
+gboolean     fp_device_supports_capture (FpDevice *device);
+G_DEPRECATED_FOR (fp_device_get_features)
+gboolean     fp_device_has_storage (FpDevice *device);
 
 G_END_DECLS

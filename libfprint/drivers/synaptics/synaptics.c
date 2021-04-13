@@ -31,14 +31,14 @@ static void init_identify_msg (FpDevice *device);
 static void compose_and_send_identify_msg (FpDevice *device);
 
 static const FpIdEntry id_table[] = {
-  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0xBD,  },
-  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0xE9,  },
-  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0xDF,  },
-  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0xF9,  },
-  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0xFC,  },
-  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0xC2,  },
-  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0xC9,  },
-  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0xE7,  },
+  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0x00BD,  },
+  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0x00E9,  },
+  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0x00DF,  },
+  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0x00F9,  },
+  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0x00FC,  },
+  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0x00C2,  },
+  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0x00C9,  },
+  { .vid = SYNAPTICS_VENDOR_ID,  .pid = 0x0100,  },
   { .vid = 0,  .pid = 0,  .driver_data = 0 },   /* terminating entry */
 };
 
@@ -1158,7 +1158,8 @@ prob_msg_cb (FpiDeviceSynaptics *self,
                                                  g_usb_device_get_serial_number_index (usb_dev),
                                                  &error);
 
-  if (resp->result == BMKT_SUCCESS)
+  /* BMKT_OPERATION_DENIED is returned if the sensor is already initialized */
+  if (resp->result == BMKT_SUCCESS || resp->result == BMKT_OPERATION_DENIED)
     {
       g_usb_device_close (usb_dev, NULL);
       fpi_device_probe_complete (FP_DEVICE (self), serial, NULL, error);
@@ -1195,9 +1196,6 @@ dev_probe (FpDevice *device)
       fpi_device_probe_complete (device, NULL, NULL, error);
       return;
     }
-
-  if (!g_usb_device_reset (usb_dev, &error))
-    goto err_close;
 
   if (!g_usb_device_claim_interface (usb_dev, 0, 0, &error))
     goto err_close;
@@ -1342,9 +1340,6 @@ dev_init (FpDevice *device)
 
   self->interrupt_cancellable = g_cancellable_new ();
 
-  if (!g_usb_device_reset (fpi_device_get_usb_device (device), &error))
-    goto error;
-
   /* Claim usb interface */
   if (!g_usb_device_claim_interface (fpi_device_get_usb_device (device), 0, 0, &error))
     goto error;
@@ -1410,4 +1405,6 @@ fpi_device_synaptics_class_init (FpiDeviceSynapticsClass *klass)
   dev_class->delete = delete_print;
   dev_class->cancel = cancel;
   dev_class->list = list;
+
+  fpi_device_class_auto_initialize_features (dev_class);
 }

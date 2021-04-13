@@ -94,9 +94,13 @@ virtual_drivers = [
     'virtual_device_storage',
 ]
 
+udev_drivers = [
+]
+
 default_drivers = [
     'upektc_img',
     'vfs5011',
+    'vfs7552',
     'aes3500',
     'aes4000',
     'aes1610',
@@ -116,6 +120,7 @@ default_drivers = [
     'upeksonly',
     'upekts',
     'goodixmoc',
+    'nb1010'
 ]
 
 # FIXME: All the drivers should be fixed by adjusting the byte order.
@@ -125,7 +130,7 @@ endian_independent_drivers = virtual_drivers + [
     'synaptics',
 ]
 
-all_drivers = default_drivers + virtual_drivers
+all_drivers = default_drivers + virtual_drivers + udev_drivers
 
 if drivers == [ 'all' ]
     drivers = all_drivers
@@ -153,6 +158,7 @@ endif
 
 nss_dep = dependency('', required: false)
 imaging_dep = dependency('', required: false)
+gudev_dep = dependency('', required: false)
 libfprint_conf.set10('HAVE_PIXMAN', false)
 foreach driver: drivers
     if driver == 'uru4000'
@@ -169,6 +175,14 @@ foreach driver: drivers
 
         libfprint_conf.set10('HAVE_PIXMAN', true)
     endif
+	if udev_drivers.contains(driver)
+		gudev_dep = dependency('gudev-1.0', required: false)
+		if not gudev_dep.found()
+			error('udev is required for SPI support')
+		endif
+
+		libfprint_conf.set10('HAVE_UDEV', true)
+	endif
     if not all_drivers.contains(driver)
         error('Invalid driver \'' + driver + '\'')
     endif
@@ -212,15 +226,27 @@ drivers_type_func += '}'
 
 root_inc = include_directories('.')
 
-if get_option('udev_rules')
+udev_hwdb = get_option('udev_hwdb')
+if not udev_hwdb.disabled()
+    # systemd v248 includes our autosuspend rules
+    udev_versioned_dep = dependency('udev', version: '>= 248', required: false)
     udev_hwdb_dir = get_option('udev_hwdb_dir')
+    if udev_hwdb.auto()
+        if udev_versioned_dep.found()
+            udev_hwdb_dir = ''
+        endif
+    else
+        if udev_versioned_dep.found()
+            warning('udev hwdb will be installed by both systemd and libfprint')
+        endif
+    endif
 
     if udev_hwdb_dir == 'auto'
         udev_dep = dependency('udev')
         udev_hwdb_dir = udev_dep.get_pkgconfig_variable('udevdir') + '/hwdb.d'
     endif
 else
-    udev_hwdb_dir = false
+    udev_hwdb_dir = ''
 endif
 
 if get_option('gtk-examples')

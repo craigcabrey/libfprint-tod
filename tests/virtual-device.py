@@ -352,6 +352,16 @@ class VirtualDevice(VirtualDeviceBase):
         self.assertEqual(self.dev.props.nr_enroll_stages, self.dev.get_nr_enroll_stages())
         self.assertEqual(self.dev.props.open, self.dev.is_open())
 
+    def test_device_features(self):
+        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.CAPTURE))
+        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.IDENTIFY))
+        self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.VERIFY))
+        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.DUPLICATES_CHECK))
+        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.STORAGE))
+        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_LIST))
+        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_DELETE))
+        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_CLEAR))
+
     def test_open_error(self):
         self._close_on_teardown = False
         self.send_command('IGNORED_COMMAND') # This will be consumed by close
@@ -420,6 +430,30 @@ class VirtualDevice(VirtualDeviceBase):
 
         self.wait_timeout(10)
         self.assertFalse(self.dev.is_open())
+
+        while not opened:
+            ctx.iteration(True)
+
+    def test_close_while_opening(self):
+        self.set_keep_alive(True)
+        self.dev.close_sync()
+
+        opened = False
+        def on_opened(dev, res):
+            nonlocal opened
+            dev.open_finish(res)
+            opened = True
+
+        self.send_sleep(500)
+        self.dev.open(callback=on_opened)
+
+        self.wait_timeout(10)
+        self.assertFalse(self.dev.is_open())
+
+        with self.assertRaises(GLib.Error) as error:
+            self.dev.close_sync()
+        self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
+                                                FPrint.DeviceError.NOT_OPEN))
 
         while not opened:
             ctx.iteration(True)
@@ -825,6 +859,21 @@ class VirtualDevice(VirtualDeviceBase):
 
         self.assertEqual(close_res.code, int(FPrint.DeviceError.BUSY))
 
+    def test_identify_unsupported(self):
+        if self.dev.supports_identify():
+            self.skipTest('Device supports identification')
+
+        with self.assertRaises(GLib.Error) as error:
+            self.dev.identify_sync([FPrint.Print.new(self.dev)])
+        self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
+                                                FPrint.DeviceError.NOT_SUPPORTED))
+
+    def test_capture_unsupported(self):
+        with self.assertRaises(GLib.Error) as error:
+            self.dev.capture_sync(wait_for_finger=False)
+        self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
+                                                FPrint.DeviceError.NOT_SUPPORTED))
+
 
 class VirtualDeviceClosed(VirtualDeviceBase):
 
@@ -979,6 +1028,16 @@ class VirtualDeviceStorage(VirtualDevice):
         self.assertTrue(self.dev.supports_identify())
         self.assertFalse(self.dev.supports_capture())
         self.assertTrue(self.dev.has_storage())
+
+    def test_device_features(self):
+        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.CAPTURE))
+        self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.IDENTIFY))
+        self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.VERIFY))
+        self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.DUPLICATES_CHECK))
+        self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.STORAGE))
+        self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_LIST))
+        self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_DELETE))
+        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_CLEAR))
 
     def test_duplicate_enroll(self):
         self.enroll_print('testprint', FPrint.Finger.LEFT_LITTLE)

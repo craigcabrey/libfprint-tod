@@ -52,7 +52,8 @@ build:
   artifacts:
     expose_as: "HTML Documentation"
     paths:
-    - _build/doc/html/
+    - _build/doc/html
+    - _build/doc/html/index.html
     expire_in: 1 week
 
 test:
@@ -63,12 +64,14 @@ test:
   script:
     - meson --werror -Ddrivers=all -Db_coverage=true . _build
     - ninja -C _build
-    - meson test -C _build --verbose --no-stdsplit --timeout-multiplier 3
+    - meson test -C _build --print-errorlogs --no-stdsplit --timeout-multiplier 3
     - ninja -C _build coverage
     - cat _build/meson-logs/coverage.txt
   artifacts:
+    expose_as: 'Coverage Report'
     paths:
       - _build/meson-logs
+      - _build/meson-logs/coveragereport/index.html
     expire_in: 1 week
   coverage: '/^TOTAL.*\s+(\d+\%)$/'
 
@@ -80,7 +83,7 @@ test_valgrind:
   script:
     - meson -Ddrivers=all . _build
     - ninja -C _build
-    - meson test -C _build --verbose --no-stdsplit --setup=valgrind
+    - meson test -C _build --print-errorlogs --no-stdsplit --setup=valgrind
 
 test_scan_build:
   stage: test

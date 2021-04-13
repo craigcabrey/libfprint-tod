@@ -24,6 +24,18 @@
 #include "fp-image.h"
 #include "fpi-print.h"
 
+#include <config.h>
+
+/**
+ * FpiDeviceUdevSubtype:
+ * @FPI_DEVICE_UDEV_SUBTYPE_SPIDEV: The device requires an spidev node
+ * @FPI_DEVICE_UDEV_SUBTYPE_HIDRAW: The device requires a hidraw node
+ */
+typedef enum {
+  FPI_DEVICE_UDEV_SUBTYPE_SPIDEV = 1 << 0,
+  FPI_DEVICE_UDEV_SUBTYPE_HIDRAW = 1 << 1,
+} FpiDeviceUdevSubtypeFlags;
+
 /**
  * FpIdEntry:
  *
@@ -43,6 +55,16 @@ struct _FpIdEntry
       guint vid;
     };
     const gchar *virtual_envvar;
+    struct
+    {
+      FpiDeviceUdevSubtypeFlags udev_types;
+      const gchar              *spi_acpi_id;
+      struct
+      {
+        guint pid;
+        guint vid;
+      } hid_id;
+    };
   };
   guint64 driver_data;
 
@@ -58,6 +80,8 @@ struct _FpIdEntry
  * @full_name: Human readable description of the driver
  * @type: The type of driver
  * @id_table: The table of IDs to bind the driver to
+ * @features: The features the device supports, it can be initialized using
+ *   fpi_device_class_auto_initialize_features() on @class_init.
  * @nr_enroll_stages: The number of enroll stages supported devices need; use
  *   fpi_device_set_nr_enroll_stages() from @probe if this is dynamic.
  * @scan_type: The scan type of supported devices; use
@@ -115,6 +139,7 @@ struct _FpDeviceClass
   const gchar     *full_name;
   FpDeviceType     type;
   const FpIdEntry *id_table;
+  FpDeviceFeature  features;
 
   /* Defaults for device properties */
   gint       nr_enroll_stages;
@@ -138,6 +163,8 @@ struct _FpDeviceClass
   /* padding for future expansion */
   gpointer _padding_dummy[32];
 };
+
+void fpi_device_class_auto_initialize_features (FpDeviceClass *device_class);
 
 /**
  * FpTimeoutFunc:
@@ -179,6 +206,8 @@ typedef enum {
 
 GUsbDevice  *fpi_device_get_usb_device (FpDevice *device);
 const gchar *fpi_device_get_virtual_env (FpDevice *device);
+gpointer     fpi_device_get_udev_data (FpDevice                 *device,
+                                       FpiDeviceUdevSubtypeFlags subtype);
 //const gchar *fpi_device_get_spi_dev (FpDevice *device);
 
 
