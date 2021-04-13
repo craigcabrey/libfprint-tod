@@ -49,7 +49,7 @@ id_table_to_string (FpDeviceType     device_type,
         }
       else
         {
-          return g_strdup ("Unsupported");
+          return g_strdup ("Unsupported device type");
         }
 
       if (!value)
@@ -105,8 +105,10 @@ main (void)
       GType driver = g_array_index (shared_drivers, GType, i);
       g_autoptr(FpDeviceClass) cls = g_type_class_ref (driver);
       g_autofree char *id_table = NULL;
+      g_autofree char *features = NULL;
 
       id_table = id_table_to_string (cls->type, cls->id_table);
+      features = g_flags_to_string (fp_device_feature_get_type (), cls->features);
 
       g_print ("ID: %s\n", cls->id);
       g_print ("Full Name: %s\n", cls->full_name);
@@ -114,6 +116,7 @@ main (void)
       g_print ("Enroll stages: %d\n", cls->nr_enroll_stages);
       g_print ("Scan type: %s\n", scan_type_to_string (cls->scan_type));
       g_print ("Supported Devices: %s\n", id_table);
+      g_print ("Supported features: %s\n", features);
       g_print ("Implemented VFuncs:\n");
       g_print ("  usb_discover: %s\n", cls->usb_discover ? "true" : "false");
       g_print ("  probe: %s\n", cls->probe ? "true" : "false");
