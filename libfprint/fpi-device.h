@@ -55,6 +55,12 @@ struct _FpIdEntry
       guint vid;
     };
     const gchar *virtual_envvar;
+  };
+  guint64 driver_data;
+
+  /* Elements added after TODv1 */
+  union
+  {
     struct
     {
       FpiDeviceUdevSubtypeFlags udev_types;
@@ -66,11 +72,10 @@ struct _FpIdEntry
       } hid_id;
     };
   };
-  guint64 driver_data;
 
   /*< private >*/
   /* padding for future expansion */
-  gpointer _padding_dummy[16];
+  gpointer _padding_dummy[13];
 };
 
 /**
