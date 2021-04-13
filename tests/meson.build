@@ -251,6 +251,7 @@ if get_option('tod')
             'tod-drivers/base-fp-print.h',
             'tod-drivers/base-fpi-device.h',
             'tod-drivers/base-fpi-image-device.h',
+            'tod-drivers/base-fpi-spi.h',
             'tod-drivers/base-fpi-usb.h',
         ],
         install_header: false)

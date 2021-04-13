@@ -26,6 +26,7 @@
 #include "tod-drivers/base-fp-print.h"
 #include "tod-drivers/base-fpi-device.h"
 #include "tod-drivers/base-fpi-image-device.h"
+#include "tod-drivers/base-fpi-spi.h"
 #include "tod-drivers/base-fpi-usb.h"
 
 static void
@@ -165,12 +166,33 @@ test_usb_private (void)
 }
 
 static void
+test_spi_private (void)
+{
+  check_struct_size (FpiSpiTransfer);
+
+  check_struct_member (FpiSpiTransfer, device);
+  check_struct_member (FpiSpiTransfer, ssm);
+  check_struct_member (FpiSpiTransfer, length_wr);
+  check_struct_member (FpiSpiTransfer, length_rd);
+  check_struct_member (FpiSpiTransfer, buffer_wr);
+  check_struct_member (FpiSpiTransfer, buffer_rd);
+  check_struct_member (FpiSpiTransfer, ref_count);
+  check_struct_member (FpiSpiTransfer, spidev_fd);
+  check_struct_member (FpiSpiTransfer, user_data);
+  check_struct_member (FpiSpiTransfer, callback);
+  check_struct_member (FpiSpiTransfer, free_buffer_wr);
+  check_struct_member (FpiSpiTransfer, free_buffer_rd);
+}
+
+static void
 test_device_public_enums (void)
 {
   check_type_compatibility (FP_TYPE_DEVICE_TYPE);
   check_type_compatibility (FP_TYPE_SCAN_TYPE);
   check_type_compatibility (FP_TYPE_DEVICE_RETRY);
   check_type_compatibility (FP_TYPE_DEVICE_ERROR);
+  check_type_compatibility (FP_TYPE_DEVICE_FEATURE);
+  check_type_compatibility (FPI_TYPE_DEVICE_UDEV_SUBTYPE_FLAGS);
 }
 
 static void
@@ -223,6 +245,7 @@ main (int argc, char *argv[])
   g_test_add_func ("/type/image-device/enums", test_image_device_enums);
   g_test_add_func ("/type/usb/private", test_usb_private);
   g_test_add_func ("/type/usb/enums", test_usb_enums);
+  g_test_add_func ("/type/spi/private", test_spi_private);
 
   return g_test_run ();
 }
