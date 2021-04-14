@@ -1,15 +1,15 @@
-LIBFPRINT_TOD_1.0.0 {
+LIBFPRINT_TOD_@tod_soversion@.0.0 {
 global:
 	fpi_*;
 local:
     *;
 };
 
-LIBFPRINT_TOD_1.0.1 {
+LIBFPRINT_TOD_@tod_soversion@.0.1 {
 global:
     fpi_device_class_auto_initialize_features;
     fpi_device_get_udev_data;
     fpi_spi_*;
     fpi_ssm_spi_*;
     fpi_ssm_get_device;
-} LIBFPRINT_TOD_1.0.0;
+} LIBFPRINT_TOD_@tod_soversion@.0.0;

@@ -10,7 +10,11 @@ configure_file(output: 'tod-config.h', configuration: tod_conf)
 gmodule_dep = dependency('gmodule-2.0', version: '>=' + glib_min_version)
 deps += gmodule_dep
 
-mapfile = files('libfprint-tod.ver')
+mapfile = configure_file(input: 'libfprint-tod.ver.in',
+    output: 'libfprint-tod.ver',
+    configuration: {
+    'tod_soversion' : tod_soversion,
+})
 
 libfprint_tod_private = static_library('fprint-tod-private',
     sources: [
@@ -34,7 +38,7 @@ libfprint_tod = library(versioned_libname.split('lib')[1] + '-tod',
     soversion: tod_soversion,
     include_directories: include_directories('..'),
     link_args: [
-        '-Wl,--version-script,@0@/@1@'.format(meson.source_root(), mapfile[0]),
+        '-Wl,--version-script,@0@'.format(mapfile),
         '-Wl,--unresolved-symbols=ignore-in-object-files'
     ],
     link_depends: mapfile,
