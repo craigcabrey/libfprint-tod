@@ -48,6 +48,7 @@ enum {
   PROP_NR_ENROLL_STAGES,
   PROP_SCAN_TYPE,
   PROP_FINGER_STATUS,
+  PROP_TEMPERATURE,
   PROP_FPI_ENVIRON,
   PROP_FPI_USB_DEVICE,
   PROP_FPI_UDEV_DATA_SPIDEV,
@@ -93,7 +94,10 @@ fp_device_cancel_in_idle_cb (gpointer user_data)
 
   priv->current_idle_cancel_source = NULL;
 
-  cls->cancel (self);
+  if (priv->critical_section)
+    priv->cancel_queued = TRUE;
+  else
+    cls->cancel (self);
 
   fpi_device_report_finger_status (self, FP_FINGER_STATUS_NONE);
 
@@ -113,24 +117,45 @@ fp_device_cancelled_cb (GCancellable *cancellable, FpDevice *self)
                          fp_device_cancel_in_idle_cb,
                          self,
                          NULL);
-  g_source_attach (priv->current_idle_cancel_source, NULL);
+  g_source_attach (priv->current_idle_cancel_source,
+                   g_task_get_context (priv->current_task));
   g_source_unref (priv->current_idle_cancel_source);
 }
 
+/* Forward the external task cancellable to the internal one. */
 static void
-maybe_cancel_on_cancelled (FpDevice     *device,
-                           GCancellable *cancellable)
+fp_device_task_cancelled_cb (GCancellable *cancellable, FpDevice *self)
 {
-  FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
+  FpDevicePrivate *priv = fp_device_get_instance_private (self);
+
+  g_cancellable_cancel (priv->current_cancellable);
+}
+
+static void
+setup_task_cancellable (FpDevice *device)
+{
   FpDevicePrivate *priv = fp_device_get_instance_private (device);
+  FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
 
-  if (!cancellable || !cls->cancel)
-    return;
+  /* Create an internal cancellable and hook it up. */
+  priv->current_cancellable = g_cancellable_new ();
+  if (cls->cancel)
+    {
+      priv->current_cancellable_id = g_cancellable_connect (priv->current_cancellable,
+                                                            G_CALLBACK (fp_device_cancelled_cb),
+                                                            device,
+                                                            NULL);
+    }
 
-  priv->current_cancellable_id = g_cancellable_connect (cancellable,
-                                                        G_CALLBACK (fp_device_cancelled_cb),
-                                                        device,
-                                                        NULL);
+  /* Task cancellable is the externally visible one, make our internal one
+   * a slave of the external one. */
+  if (g_task_get_cancellable (priv->current_task))
+    {
+      priv->current_task_cancellable_id = g_cancellable_connect (g_task_get_cancellable (priv->current_task),
+                                                                 G_CALLBACK (fp_device_task_cancelled_cb),
+                                                                 device,
+                                                                 NULL);
+    }
 }
 
 static void
@@ -146,8 +171,39 @@ fp_device_constructed (GObject *object)
   if (cls->nr_enroll_stages)
     priv->nr_enroll_stages = cls->nr_enroll_stages;
   priv->scan_type = cls->scan_type;
+  priv->features = cls->features;
   priv->device_name = g_strdup (cls->full_name);
   priv->device_id = g_strdup ("0");
+
+  if (cls->temp_hot_seconds > 0)
+    {
+      priv->temp_hot_seconds = cls->temp_hot_seconds;
+      priv->temp_cold_seconds = cls->temp_cold_seconds;
+      g_assert (priv->temp_cold_seconds > 0);
+    }
+  else if (cls->temp_hot_seconds == 0)
+    {
+      priv->temp_hot_seconds = DEFAULT_TEMP_HOT_SECONDS;
+      priv->temp_cold_seconds = DEFAULT_TEMP_COLD_SECONDS;
+    }
+  else
+    {
+      /* Temperature management disabled */
+      priv->temp_hot_seconds = -1;
+      priv->temp_cold_seconds = -1;
+    }
+
+  /* Start out at not completely cold (i.e. assume we are only at the upper
+   * bound of COLD).
+   * To be fair, the warm-up from 0 to WARM should be really short either way.
+   *
+   * Note that a call to fpi_device_update_temp() is not needed here as no
+   * timeout must be registered.
+   */
+  priv->temp_current = FP_TEMPERATURE_COLD;
+  priv->temp_current_ratio = TEMP_COLD_THRESH;
+  priv->temp_last_update = g_get_monotonic_time ();
+  priv->temp_last_active = FALSE;
 
   G_OBJECT_CLASS (fp_device_parent_class)->constructed (object);
 }
@@ -162,6 +218,8 @@ fp_device_finalize (GObject *object)
   g_assert (priv->current_task == NULL);
   if (priv->is_open)
     g_warning ("User destroyed open device! Not cleaning up properly!");
+
+  g_clear_pointer (&priv->temp_timeout, g_source_destroy);
 
   g_slist_free_full (priv->sources, (GDestroyNotify) g_source_destroy);
 
@@ -200,6 +258,10 @@ fp_device_get_property (GObject    *object,
 
     case PROP_FINGER_STATUS:
       g_value_set_flags (value, priv->finger_status);
+      break;
+
+    case PROP_TEMPERATURE:
+      g_value_set_enum (value, priv->temp_current);
       break;
 
     case PROP_DRIVER:
@@ -278,6 +340,24 @@ fp_device_set_property (GObject      *object,
 }
 
 static void
+device_idle_probe_cb (FpDevice *self, gpointer user_data)
+{
+  /* This should not be an idle handler, see comment where it is registered.
+   *
+   * This effectively disables USB "persist" for us, and possibly turns off
+   * USB wakeup if it was enabled for some reason.
+   */
+  fpi_device_configure_wakeup (self, FALSE);
+
+  if (!FP_DEVICE_GET_CLASS (self)->probe)
+    fpi_device_probe_complete (self, NULL, NULL, NULL);
+  else
+    FP_DEVICE_GET_CLASS (self)->probe (self);
+
+  return;
+}
+
+static void
 fp_device_async_initable_init_async (GAsyncInitable     *initable,
                                      int                 io_priority,
                                      GCancellable       *cancellable,
@@ -296,17 +376,16 @@ fp_device_async_initable_init_async (GAsyncInitable     *initable,
   if (g_task_return_error_if_cancelled (task))
     return;
 
-  if (!FP_DEVICE_GET_CLASS (self)->probe)
-    {
-      g_task_return_boolean (task, TRUE);
-      return;
-    }
-
   priv->current_action = FPI_DEVICE_ACTION_PROBE;
   priv->current_task = g_steal_pointer (&task);
-  maybe_cancel_on_cancelled (self, cancellable);
+  setup_task_cancellable (self);
 
-  FP_DEVICE_GET_CLASS (self)->probe (self);
+  /* We push this into an idle handler for compatibility with libgusb
+   * 0.3.7 and before.
+   * See https://github.com/hughsie/libgusb/pull/50
+   */
+  g_source_set_name (fpi_device_add_timeout (self, 0, device_idle_probe_cb, NULL, NULL),
+                     "libusb probe in idle");
 }
 
 static gboolean
@@ -355,6 +434,13 @@ fp_device_class_init (FpDeviceClass *klass)
                         "The status of the finger",
                         FP_TYPE_FINGER_STATUS_FLAGS, FP_FINGER_STATUS_NONE,
                         G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
+
+  properties[PROP_TEMPERATURE] =
+    g_param_spec_enum ("temperature",
+                       "Temperature",
+                       "The temperature estimation for device to prevent overheating.",
+                       FP_TYPE_TEMPERATURE, FP_TEMPERATURE_COLD,
+                       G_PARAM_STATIC_STRINGS | G_PARAM_READABLE);
 
   properties[PROP_DRIVER] =
     g_param_spec_string ("driver",
@@ -615,6 +701,25 @@ fp_device_get_nr_enroll_stages (FpDevice *device)
 }
 
 /**
+ * fp_device_get_temperature:
+ * @device: A #FpDevice
+ *
+ * Retrieves simple temperature information for device. It is not possible
+ * to use a device when this is #FP_TEMPERATURE_HOT.
+ *
+ * Returns: The current temperature estimation.
+ */
+FpTemperature
+fp_device_get_temperature (FpDevice *device)
+{
+  FpDevicePrivate *priv = fp_device_get_instance_private (device);
+
+  g_return_val_if_fail (FP_IS_DEVICE (device), -1);
+
+  return priv->temp_current;
+}
+
+/**
  * fp_device_supports_identify:
  * @device: A #FpDevice
  *
@@ -627,10 +732,11 @@ gboolean
 fp_device_supports_identify (FpDevice *device)
 {
   FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
+  FpDevicePrivate *priv = fp_device_get_instance_private (device);
 
   g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
 
-  return cls->identify && !!(cls->features & FP_DEVICE_FEATURE_IDENTIFY);
+  return cls->identify && !!(priv->features & FP_DEVICE_FEATURE_IDENTIFY);
 }
 
 /**
@@ -646,10 +752,11 @@ gboolean
 fp_device_supports_capture (FpDevice *device)
 {
   FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
+  FpDevicePrivate *priv = fp_device_get_instance_private (device);
 
   g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
 
-  return cls->capture && !!(cls->features & FP_DEVICE_FEATURE_CAPTURE);
+  return cls->capture && !!(priv->features & FP_DEVICE_FEATURE_CAPTURE);
 }
 
 /**
@@ -665,11 +772,11 @@ fp_device_supports_capture (FpDevice *device)
 gboolean
 fp_device_has_storage (FpDevice *device)
 {
-  FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
+  FpDevicePrivate *priv = fp_device_get_instance_private (device);
 
   g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
 
-  return !!(cls->features & FP_DEVICE_FEATURE_STORAGE);
+  return !!(priv->features & FP_DEVICE_FEATURE_STORAGE);
 }
 
 /**
@@ -704,7 +811,7 @@ fp_device_open (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
@@ -733,7 +840,7 @@ fp_device_open (FpDevice           *device,
 
   priv->current_action = FPI_DEVICE_ACTION_OPEN;
   priv->current_task = g_steal_pointer (&task);
-  maybe_cancel_on_cancelled (device, cancellable);
+  setup_task_cancellable (device);
   fpi_device_report_finger_status (device, FP_FINGER_STATUS_NONE);
 
   FP_DEVICE_GET_CLASS (device)->open (device);
@@ -789,7 +896,7 @@ fp_device_close (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
@@ -798,7 +905,7 @@ fp_device_close (FpDevice           *device,
 
   priv->current_action = FPI_DEVICE_ACTION_CLOSE;
   priv->current_task = g_steal_pointer (&task);
-  maybe_cancel_on_cancelled (device, cancellable);
+  setup_task_cancellable (device);
 
   FP_DEVICE_GET_CLASS (device)->close (device);
 }
@@ -818,6 +925,230 @@ gboolean
 fp_device_close_finish (FpDevice     *device,
                         GAsyncResult *result,
                         GError      **error)
+{
+  return g_task_propagate_boolean (G_TASK (result), error);
+}
+
+static void
+complete_suspend_resume_task (FpDevice *device)
+{
+  FpDevicePrivate *priv = fp_device_get_instance_private (device);
+
+  g_assert (priv->suspend_resume_task);
+
+  g_task_return_boolean (g_steal_pointer (&priv->suspend_resume_task), TRUE);
+}
+
+/**
+ * fp_device_suspend:
+ * @device: a #FpDevice
+ * @cancellable: (nullable): a #GCancellable, or %NULL, currently not used
+ * @callback: the function to call on completion
+ * @user_data: the data to pass to @callback
+ *
+ * Prepare the device for system suspend. Retrieve the result with
+ * fp_device_suspend_finish().
+ *
+ * The suspend method can be called at any time (even if the device is not
+ * opened) and must be paired with a corresponding resume call. It is undefined
+ * when or how any ongoing operation is finished. This call might wait for an
+ * ongoing operation to finish, might cancel the ongoing operation or may
+ * prepare the device so that the host is resumed when the operation can be
+ * finished.
+ *
+ * If an ongoing operation must be cancelled then it will complete with an error
+ * code of #FP_DEVICE_ERROR_BUSY before the suspend async routine finishes.
+ *
+ * Any operation started while the device is suspended will fail with
+ * #FP_DEVICE_ERROR_BUSY, this includes calls to open or close the device.
+ */
+void
+fp_device_suspend (FpDevice           *device,
+                   GCancellable       *cancellable,
+                   GAsyncReadyCallback callback,
+                   gpointer            user_data)
+{
+  g_autoptr(GTask) task = NULL;
+  FpDevicePrivate *priv = fp_device_get_instance_private (device);
+
+  task = g_task_new (device, cancellable, callback, user_data);
+
+  if (priv->suspend_resume_task || priv->is_suspended)
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
+      return;
+    }
+
+  if (priv->is_removed)
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new (FP_DEVICE_ERROR_REMOVED));
+      return;
+    }
+
+  priv->suspend_resume_task = g_steal_pointer (&task);
+
+  /* If the device is currently idle, just complete immediately.
+   * For long running tasks, call the driver handler right away, for short
+   * tasks, wait for completion and then return the task.
+   */
+  switch (priv->current_action)
+    {
+    case FPI_DEVICE_ACTION_NONE:
+      fpi_device_suspend_complete (device, NULL);
+      break;
+
+    case FPI_DEVICE_ACTION_ENROLL:
+    case FPI_DEVICE_ACTION_VERIFY:
+    case FPI_DEVICE_ACTION_IDENTIFY:
+    case FPI_DEVICE_ACTION_CAPTURE:
+      if (FP_DEVICE_GET_CLASS (device)->suspend)
+        {
+          if (priv->critical_section)
+            priv->suspend_queued = TRUE;
+          else
+            FP_DEVICE_GET_CLASS (device)->suspend (device);
+        }
+      else
+        {
+          fpi_device_suspend_complete (device, fpi_device_error_new (FP_DEVICE_ERROR_NOT_SUPPORTED));
+        }
+      break;
+
+    default:
+    case FPI_DEVICE_ACTION_PROBE:
+    case FPI_DEVICE_ACTION_OPEN:
+    case FPI_DEVICE_ACTION_CLOSE:
+    case FPI_DEVICE_ACTION_DELETE:
+    case FPI_DEVICE_ACTION_LIST:
+    case FPI_DEVICE_ACTION_CLEAR_STORAGE:
+      g_signal_connect_object (priv->current_task,
+                               "notify::completed",
+                               G_CALLBACK (complete_suspend_resume_task),
+                               device,
+                               G_CONNECT_SWAPPED);
+
+      break;
+    }
+}
+
+/**
+ * fp_device_suspend_finish:
+ * @device: A #FpDevice
+ * @result: A #GAsyncResult
+ * @error: Return location for errors, or %NULL to ignore
+ *
+ * Finish an asynchronous operation to prepare the device for suspend.
+ * See fp_device_suspend().
+ *
+ * The API user should accept an error of #FP_DEVICE_ERROR_NOT_SUPPORTED.
+ *
+ * Returns: (type void): %FALSE on error, %TRUE otherwise
+ */
+gboolean
+fp_device_suspend_finish (FpDevice     *device,
+                          GAsyncResult *result,
+                          GError      **error)
+{
+  return g_task_propagate_boolean (G_TASK (result), error);
+}
+
+/**
+ * fp_device_resume:
+ * @device: a #FpDevice
+ * @cancellable: (nullable): a #GCancellable, or %NULL, currently not used
+ * @callback: the function to call on completion
+ * @user_data: the data to pass to @callback
+ *
+ * Resume device after system suspend. Retrieve the result with
+ * fp_device_suspend_finish().
+ *
+ * Note that it is not defined when any ongoing operation may return (success or
+ * error). You must be ready to handle this before, during or after the
+ * resume operation.
+ */
+void
+fp_device_resume (FpDevice           *device,
+                  GCancellable       *cancellable,
+                  GAsyncReadyCallback callback,
+                  gpointer            user_data)
+{
+  g_autoptr(GTask) task = NULL;
+  FpDevicePrivate *priv = fp_device_get_instance_private (device);
+
+  task = g_task_new (device, cancellable, callback, user_data);
+
+  if (priv->suspend_resume_task || !priv->is_suspended)
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
+      return;
+    }
+
+  if (priv->is_removed)
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new (FP_DEVICE_ERROR_REMOVED));
+      return;
+    }
+
+  priv->suspend_resume_task = g_steal_pointer (&task);
+
+  switch (priv->current_action)
+    {
+    case FPI_DEVICE_ACTION_NONE:
+      fpi_device_resume_complete (device, NULL);
+      break;
+
+    case FPI_DEVICE_ACTION_ENROLL:
+    case FPI_DEVICE_ACTION_VERIFY:
+    case FPI_DEVICE_ACTION_IDENTIFY:
+    case FPI_DEVICE_ACTION_CAPTURE:
+      if (FP_DEVICE_GET_CLASS (device)->resume)
+        {
+          if (priv->critical_section)
+            priv->resume_queued = TRUE;
+          else
+            FP_DEVICE_GET_CLASS (device)->resume (device);
+        }
+      else
+        {
+          fpi_device_resume_complete (device, fpi_device_error_new (FP_DEVICE_ERROR_NOT_SUPPORTED));
+        }
+      break;
+
+    default:
+    case FPI_DEVICE_ACTION_PROBE:
+    case FPI_DEVICE_ACTION_OPEN:
+    case FPI_DEVICE_ACTION_CLOSE:
+    case FPI_DEVICE_ACTION_DELETE:
+    case FPI_DEVICE_ACTION_LIST:
+    case FPI_DEVICE_ACTION_CLEAR_STORAGE:
+      /* cannot happen as we make sure these tasks complete before suspend */
+      g_assert_not_reached ();
+      complete_suspend_resume_task (device);
+      break;
+    }
+}
+
+/**
+ * fp_device_resume_finish:
+ * @device: A #FpDevice
+ * @result: A #GAsyncResult
+ * @error: Return location for errors, or %NULL to ignore
+ *
+ * Finish an asynchronous operation to resume the device after suspend.
+ * See fp_device_resume().
+ *
+ * The API user should accept an error of #FP_DEVICE_ERROR_NOT_SUPPORTED.
+ *
+ * Returns: (type void): %FALSE on error, %TRUE otherwise
+ */
+gboolean
+fp_device_resume_finish (FpDevice     *device,
+                         GAsyncResult *result,
+                         GError      **error)
 {
   return g_task_propagate_boolean (G_TASK (result), error);
 }
@@ -870,7 +1201,7 @@ fp_device_enroll (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
@@ -896,7 +1227,15 @@ fp_device_enroll (FpDevice           *device,
 
   priv->current_action = FPI_DEVICE_ACTION_ENROLL;
   priv->current_task = g_steal_pointer (&task);
-  maybe_cancel_on_cancelled (device, cancellable);
+  setup_task_cancellable (device);
+
+  fpi_device_update_temp (device, TRUE);
+  if (priv->temp_current == FP_TEMPERATURE_HOT)
+    {
+      g_task_return_error (task, fpi_device_error_new (FP_DEVICE_ERROR_TOO_HOT));
+      fpi_device_update_temp (device, FALSE);
+      return;
+    }
 
   data = g_new0 (FpEnrollData, 1);
   data->print = g_object_ref_sink (template_print);
@@ -972,14 +1311,14 @@ fp_device_verify (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
       return;
     }
 
-  if (!cls->verify || !(cls->features & FP_DEVICE_FEATURE_VERIFY))
+  if (!cls->verify || !(priv->features & FP_DEVICE_FEATURE_VERIFY))
     {
       g_task_return_error (task,
                            fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
@@ -989,7 +1328,15 @@ fp_device_verify (FpDevice           *device,
 
   priv->current_action = FPI_DEVICE_ACTION_VERIFY;
   priv->current_task = g_steal_pointer (&task);
-  maybe_cancel_on_cancelled (device, cancellable);
+  setup_task_cancellable (device);
+
+  fpi_device_update_temp (device, TRUE);
+  if (priv->temp_current == FP_TEMPERATURE_HOT)
+    {
+      g_task_return_error (task, fpi_device_error_new (FP_DEVICE_ERROR_TOO_HOT));
+      fpi_device_update_temp (device, FALSE);
+      return;
+    }
 
   data = g_new0 (FpMatchData, 1);
   data->enrolled_print = g_object_ref (enrolled_print);
@@ -1091,14 +1438,14 @@ fp_device_identify (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
       return;
     }
 
-  if (!cls->identify || !(cls->features & FP_DEVICE_FEATURE_IDENTIFY))
+  if (!cls->identify || !(priv->features & FP_DEVICE_FEATURE_IDENTIFY))
     {
       g_task_return_error (task,
                            fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
@@ -1108,7 +1455,15 @@ fp_device_identify (FpDevice           *device,
 
   priv->current_action = FPI_DEVICE_ACTION_IDENTIFY;
   priv->current_task = g_steal_pointer (&task);
-  maybe_cancel_on_cancelled (device, cancellable);
+  setup_task_cancellable (device);
+
+  fpi_device_update_temp (device, TRUE);
+  if (priv->temp_current == FP_TEMPERATURE_HOT)
+    {
+      g_task_return_error (task, fpi_device_error_new (FP_DEVICE_ERROR_TOO_HOT));
+      fpi_device_update_temp (device, FALSE);
+      return;
+    }
 
   data = g_new0 (FpMatchData, 1);
   /* We cannot store the gallery directly, because the ptr array may not own
@@ -1208,14 +1563,14 @@ fp_device_capture (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
       return;
     }
 
-  if (!cls->capture || !(cls->features & FP_DEVICE_FEATURE_CAPTURE))
+  if (!cls->capture || !(priv->features & FP_DEVICE_FEATURE_CAPTURE))
     {
       g_task_return_error (task,
                            fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
@@ -1225,7 +1580,15 @@ fp_device_capture (FpDevice           *device,
 
   priv->current_action = FPI_DEVICE_ACTION_CAPTURE;
   priv->current_task = g_steal_pointer (&task);
-  maybe_cancel_on_cancelled (device, cancellable);
+  setup_task_cancellable (device);
+
+  fpi_device_update_temp (device, TRUE);
+  if (priv->temp_current == FP_TEMPERATURE_HOT)
+    {
+      g_task_return_error (task, fpi_device_error_new (FP_DEVICE_ERROR_TOO_HOT));
+      fpi_device_update_temp (device, FALSE);
+      return;
+    }
 
   priv->wait_for_finger = wait_for_finger;
 
@@ -1291,7 +1654,7 @@ fp_device_delete_print (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
@@ -1299,7 +1662,7 @@ fp_device_delete_print (FpDevice           *device,
     }
 
   /* Succeed immediately if delete is not implemented. */
-  if (!cls->delete || !(cls->features & FP_DEVICE_FEATURE_STORAGE_DELETE))
+  if (!cls->delete || !(priv->features & FP_DEVICE_FEATURE_STORAGE_DELETE))
     {
       g_task_return_boolean (task, TRUE);
       return;
@@ -1307,7 +1670,7 @@ fp_device_delete_print (FpDevice           *device,
 
   priv->current_action = FPI_DEVICE_ACTION_DELETE;
   priv->current_task = g_steal_pointer (&task);
-  maybe_cancel_on_cancelled (device, cancellable);
+  setup_task_cancellable (device);
 
   g_task_set_task_data (priv->current_task,
                         g_object_ref (enrolled_print),
@@ -1369,14 +1732,14 @@ fp_device_list_prints (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
       return;
     }
 
-  if (!cls->list || !(cls->features & FP_DEVICE_FEATURE_STORAGE))
+  if (!cls->list || !(priv->features & FP_DEVICE_FEATURE_STORAGE))
     {
       g_task_return_error (task,
                            fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
@@ -1386,7 +1749,7 @@ fp_device_list_prints (FpDevice           *device,
 
   priv->current_action = FPI_DEVICE_ACTION_LIST;
   priv->current_task = g_steal_pointer (&task);
-  maybe_cancel_on_cancelled (device, cancellable);
+  setup_task_cancellable (device);
 
   cls->list (device);
 }
@@ -1409,6 +1772,93 @@ fp_device_list_prints_finish (FpDevice     *device,
                               GError      **error)
 {
   return g_task_propagate_pointer (G_TASK (result), error);
+}
+
+/**
+ * fp_device_clear_storage:
+ * @device: a #FpDevice
+ * @cancellable: (nullable): a #GCancellable, or %NULL
+ * @callback: the function to call on completion
+ * @user_data: the data to pass to @callback
+ *
+ * Start an asynchronous operation to delete all prints from the device.
+ * The callback will be called once the operation has finished. Retrieve
+ * the result with fp_device_clear_storage_finish().
+ *
+ * This only makes sense on devices that store prints on-chip, but is safe
+ * to always call.
+ */
+void
+fp_device_clear_storage (FpDevice           *device,
+                         GCancellable       *cancellable,
+                         GAsyncReadyCallback callback,
+                         gpointer            user_data)
+{
+  g_autoptr(GTask) task = NULL;
+  FpDevicePrivate *priv = fp_device_get_instance_private (device);
+  FpDeviceClass *cls = FP_DEVICE_GET_CLASS (device);
+
+  task = g_task_new (device, cancellable, callback, user_data);
+  if (g_task_return_error_if_cancelled (task))
+    return;
+
+  if (!priv->is_open)
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new (FP_DEVICE_ERROR_NOT_OPEN));
+      return;
+    }
+
+  if (priv->current_task)
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
+      return;
+    }
+
+  if (!(priv->features & FP_DEVICE_FEATURE_STORAGE))
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                                     "Device has no storage."));
+      return;
+    }
+
+  if (!(priv->features & FP_DEVICE_FEATURE_STORAGE_CLEAR))
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                                     "Device doesn't support clearing storage."));
+      return;
+    }
+
+  priv->current_action = FPI_DEVICE_ACTION_CLEAR_STORAGE;
+  priv->current_task = g_steal_pointer (&task);
+  setup_task_cancellable (device);
+
+  cls->clear_storage (device);
+
+  return;
+}
+
+/**
+ * fp_device_clear_storage_finish:
+ * @device: A #FpDevice
+ * @result: A #GAsyncResult
+ * @error: Return location for errors, or %NULL to ignore
+ *
+ * Finish an asynchronous operation to delete all enrolled prints.
+ *
+ * See fp_device_clear_storage().
+ *
+ * Returns: (type void): %FALSE on error, %TRUE otherwise
+ */
+gboolean
+fp_device_clear_storage_finish (FpDevice     *device,
+                                GAsyncResult *result,
+                                GError      **error)
+{
+  return g_task_propagate_boolean (G_TASK (result), error);
 }
 
 static void
@@ -1628,7 +2078,7 @@ fp_device_capture_sync (FpDevice     *device,
  *
  * Delete a given print from the device.
  *
- * Returns: %FALSE on error, %TRUE otherwise
+ * Returns: (type void): %FALSE on error, %TRUE otherwise
  */
 gboolean
 fp_device_delete_print_sync (FpDevice     *device,
@@ -1678,6 +2128,87 @@ fp_device_list_prints_sync (FpDevice     *device,
   return fp_device_list_prints_finish (device, task, error);
 }
 
+
+/**
+ * fp_device_clear_storage_sync:
+ * @device: a #FpDevice
+ * @cancellable: (nullable): a #GCancellable, or %NULL
+ * @error: Return location for errors, or %NULL to ignore
+ *
+ * Clear sensor storage.
+ *
+ * Returns: (type void): %FALSE on error, %TRUE otherwise
+ */
+gboolean
+fp_device_clear_storage_sync (FpDevice     *device,
+                              GCancellable *cancellable,
+                              GError      **error)
+{
+  g_autoptr(GAsyncResult) task = NULL;
+
+  g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
+
+  fp_device_clear_storage (device,
+                           cancellable,
+                           async_result_ready, &task);
+  while (!task)
+    g_main_context_iteration (NULL, TRUE);
+
+  return fp_device_clear_storage_finish (device, task, error);
+}
+
+/**
+ * fp_device_suspend_sync:
+ * @device: a #FpDevice
+ * @cancellable: (nullable): a #GCancellable, or %NULL, currently not used
+ * @error: Return location for errors, or %NULL to ignore
+ *
+ * Prepare device for suspend.
+ *
+ * Returns: (type void): %FALSE on error, %TRUE otherwise
+ */
+gboolean
+fp_device_suspend_sync (FpDevice     *device,
+                        GCancellable *cancellable,
+                        GError      **error)
+{
+  g_autoptr(GAsyncResult) task = NULL;
+
+  g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
+
+  fp_device_suspend (device, cancellable, async_result_ready, &task);
+  while (!task)
+    g_main_context_iteration (NULL, TRUE);
+
+  return fp_device_suspend_finish (device, task, error);
+}
+
+/**
+ * fp_device_resume_sync:
+ * @device: a #FpDevice
+ * @cancellable: (nullable): a #GCancellable, or %NULL, currently not used
+ * @error: Return location for errors, or %NULL to ignore
+ *
+ * Resume device after suspend.
+ *
+ * Returns: (type void): %FALSE on error, %TRUE otherwise
+ */
+gboolean
+fp_device_resume_sync (FpDevice     *device,
+                       GCancellable *cancellable,
+                       GError      **error)
+{
+  g_autoptr(GAsyncResult) task = NULL;
+
+  g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
+
+  fp_device_resume (device, cancellable, async_result_ready, &task);
+  while (!task)
+    g_main_context_iteration (NULL, TRUE);
+
+  return fp_device_resume_finish (device, task, error);
+}
+
 /**
  * fp_device_get_features:
  * @device: a #FpDevice
@@ -1689,9 +2220,11 @@ fp_device_list_prints_sync (FpDevice     *device,
 FpDeviceFeature
 fp_device_get_features (FpDevice *device)
 {
+  FpDevicePrivate *priv = fp_device_get_instance_private (device);
+
   g_return_val_if_fail (FP_IS_DEVICE (device), FP_DEVICE_FEATURE_NONE);
 
-  return FP_DEVICE_GET_CLASS (device)->features;
+  return priv->features;
 }
 
 /**

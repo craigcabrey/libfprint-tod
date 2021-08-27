@@ -23,6 +23,7 @@
 #include "fpi-context.h"
 #include "fpi-device.h"
 #include <gusb.h>
+#include <stdio.h>
 
 #include <config.h>
 
@@ -31,12 +32,6 @@
 #endif
 
 #ifdef HAVE_UDEV
-#include <sys/ioctl.h>
-#include <sys/unistd.h>
-#include <sys/types.h>
-#include <sys/fcntl.h>
-#include <sys/stat.h>
-#include <linux/hidraw.h>
 #include <gudev/gudev.h>
 #endif
 
@@ -56,6 +51,8 @@ typedef struct
 {
   GUsbContext  *usb_ctx;
   GCancellable *cancellable;
+
+  GSList       *sources;
 
   gint          pending_devices;
   gboolean      enumerated;
@@ -106,6 +103,7 @@ typedef struct
 {
   FpContext *context;
   FpDevice  *device;
+  GSource   *source;
 } RemoveDeviceData;
 
 static gboolean
@@ -119,21 +117,36 @@ remove_device_idle_cb (RemoveDeviceData *data)
   g_signal_emit (data->context, signals[DEVICE_REMOVED_SIGNAL], 0, data->device);
   g_ptr_array_remove_index_fast (priv->devices, idx);
 
-  g_free (data);
-
   return G_SOURCE_REMOVE;
+}
+
+static void
+remove_device_data_free (RemoveDeviceData *data)
+{
+  FpContextPrivate *priv = fp_context_get_instance_private (data->context);
+
+  priv->sources = g_slist_remove (priv->sources, data->source);
+  g_free (data);
 }
 
 static void
 remove_device (FpContext *context, FpDevice *device)
 {
+  g_autoptr(GSource) source = NULL;
+  FpContextPrivate *priv = fp_context_get_instance_private (context);
   RemoveDeviceData *data;
 
   data = g_new (RemoveDeviceData, 1);
   data->context = context;
   data->device = device;
 
-  g_idle_add ((GSourceFunc) remove_device_idle_cb, data);
+  source = data->source = g_idle_source_new ();
+  g_source_set_callback (source,
+                         G_SOURCE_FUNC (remove_device_idle_cb), data,
+                         (GDestroyNotify) remove_device_data_free);
+  g_source_attach (source, g_main_context_get_thread_default ());
+
+  priv->sources = g_slist_prepend (priv->sources, source);
 }
 
 static void
@@ -151,9 +164,16 @@ device_removed_cb (FpContext *context, FpDevice *device)
 
   /* Wait for device close if the device is currently still open. */
   if (open)
-    g_signal_connect_swapped (device, "notify::open", (GCallback) device_remove_on_notify_open_cb, context);
+    {
+      g_signal_connect_object (device, "notify::open",
+                               (GCallback) device_remove_on_notify_open_cb,
+                               context,
+                               G_CONNECT_SWAPPED);
+    }
   else
-    remove_device (context, device);
+    {
+      remove_device (context, device);
+    }
 }
 
 static void
@@ -181,7 +201,10 @@ async_device_init_done_cb (GObject *source_object, GAsyncResult *res, gpointer u
 
   g_ptr_array_add (priv->devices, device);
 
-  g_signal_connect_swapped (device, "removed", (GCallback) device_removed_cb, context);
+  g_signal_connect_object (device, "removed",
+                           (GCallback) device_removed_cb,
+                           context,
+                           G_CONNECT_SWAPPED);
 
   g_signal_emit (context, signals[DEVICE_ADDED_SIGNAL], 0, device);
 }
@@ -277,6 +300,8 @@ fp_context_finalize (GObject *object)
   g_cancellable_cancel (priv->cancellable);
   g_clear_object (&priv->cancellable);
   g_clear_pointer (&priv->drivers, g_array_unref);
+
+  g_slist_free_full (g_steal_pointer (&priv->sources), (GDestroyNotify) g_source_destroy);
 
   if (priv->usb_ctx)
     g_object_run_dispose (G_OBJECT (priv->usb_ctx));
@@ -502,22 +527,18 @@ fp_context_enumerate (FpContext *context)
               {
                 for (matched_hidraw = hidraw_devices; matched_hidraw; matched_hidraw = matched_hidraw->next)
                   {
-                    const gchar * devnode = g_udev_device_get_device_file (matched_hidraw->data);
-                    int temp_hid = -1, res;
-                    struct hidraw_devinfo info;
+                    /* Find the parent HID node, and check the vid/pid from its HID_ID property */
+                    g_autoptr(GUdevDevice) parent = g_udev_device_get_parent_with_subsystem (matched_hidraw->data, "hid", NULL);
+                    const gchar * hid_id = g_udev_device_get_property (parent, "HID_ID");
+                    guint32 vendor, product;
 
-                    if (!devnode)
+                    if (!parent || !hid_id)
                       continue;
 
-                    temp_hid = open (devnode, O_RDWR);
-                    if (temp_hid < 0)
+                    if (sscanf (hid_id, "%*X:%X:%X", &vendor, &product) != 2)
                       continue;
 
-                    res = ioctl (temp_hid, HIDIOCGRAWINFO, &info);
-                    close (temp_hid);
-                    if (res < 0)
-                      continue;
-                    if (info.vendor == entry->hid_id.vid && info.product == entry->hid_id.pid)
+                    if (vendor == entry->hid_id.vid && product == entry->hid_id.pid)
                       break;
                   }
                 /* If match was not found exit */

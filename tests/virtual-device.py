@@ -22,14 +22,6 @@ except Exception as e:
 
 FPrint = None
 
-# Re-run the test with the passed wrapper if set
-wrapper = os.getenv('LIBFPRINT_TEST_WRAPPER')
-if wrapper:
-    wrap_cmd = wrapper.split(' ') + [sys.executable, os.path.abspath(__file__)] + \
-        sys.argv[1:]
-    os.unsetenv('LIBFPRINT_TEST_WRAPPER')
-    sys.exit(subprocess.check_call(wrap_cmd))
-
 ctx = GLib.main_context_default()
 
 
@@ -123,7 +115,8 @@ class VirtualDeviceBase(unittest.TestCase):
     def send_command(self, command, *args):
         self.assertIn(command, ['INSERT', 'REMOVE', 'SCAN', 'ERROR', 'RETRY',
             'FINGER', 'UNPLUG', 'SLEEP', 'SET_ENROLL_STAGES', 'SET_SCAN_TYPE',
-            'SET_CANCELLATION_ENABLED', 'SET_KEEP_ALIVE', 'IGNORED_COMMAND'])
+            'SET_CANCELLATION_ENABLED', 'SET_KEEP_ALIVE', 'IGNORED_COMMAND',
+            'CONT'])
 
         with Connection(self.sockaddr) as con:
             params = ' '.join(str(p) for p in args)
@@ -329,7 +322,7 @@ class VirtualDeviceBase(unittest.TestCase):
             else:
                 self.assertFalse(match)
 
-        if isinstance(scan_nick, str):
+        if isinstance(scan_nick, str) and not self.dev.has_storage():
             self.assertEqual(self._verify_fp.props.fpi_data.get_string(), scan_nick)
 
 
@@ -477,15 +470,8 @@ class VirtualDevice(VirtualDeviceBase):
     def test_enroll_verify_no_match(self):
         matching = self.enroll_print('testprint', FPrint.Finger.LEFT_RING)
 
-        if self.dev.has_storage():
-            with self.assertRaises(GLib.Error) as error:
-                self.check_verify(matching, 'not-testprint', match=False,
-                    identify=self.dev.supports_identify())
-            self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
-                                                    FPrint.DeviceError.DATA_NOT_FOUND))
-        else:
-            self.check_verify(matching, 'not-testprint', match=False,
-                identify=self.dev.supports_identify())
+        self.check_verify(matching, 'not-testprint', match=False,
+            identify=self.dev.supports_identify())
 
     def test_enroll_verify_error(self):
         matching = self.enroll_print('testprint', FPrint.Finger.LEFT_RING)
@@ -604,14 +590,11 @@ class VirtualDevice(VirtualDeviceBase):
                                                 FPrint.DeviceRetry.TOO_SHORT))
 
         self.send_command('SCAN', 'another-id')
+        verify_match, verify_fp = self.dev.verify_sync(enrolled)
+        self.assertFalse(verify_match)
         if self.dev.has_storage():
-            with self.assertRaises(GLib.GError) as error:
-                self.dev.verify_sync(enrolled)
-            self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
-                                                    FPrint.DeviceError.DATA_NOT_FOUND))
+            self.assertIsNone(verify_fp)
         else:
-            verify_match, verify_fp = self.dev.verify_sync(enrolled)
-            self.assertFalse(verify_match)
             self.assertFalse(verify_fp.equal(enrolled))
 
         self.send_auto(enrolled)
@@ -828,13 +811,7 @@ class VirtualDevice(VirtualDeviceBase):
         self.wait_timeout(10)
         self.assertFalse(self._verify_completed)
 
-        if self.dev.has_storage():
-            with self.assertRaises(GLib.Error) as error:
-                self.complete_verify()
-            self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
-                                                    FPrint.DeviceError.DATA_NOT_FOUND))
-        else:
-            self.complete_verify()
+        self.complete_verify()
         self.assertTrue(self._verify_reported)
 
     def test_close_error(self):
@@ -1014,8 +991,8 @@ class VirtualDeviceStorage(VirtualDevice):
 
     def cleanup_device_storage(self):
         if self.dev.is_open() and not self.dev.props.removed:
-            for print in self.dev.list_prints_sync():
-                self.assertTrue(self.dev.delete_print_sync(print, None))
+            self.send_command('CONT')
+            self.dev.clear_storage_sync()
 
     def test_device_properties(self):
         self.assertEqual(self.dev.get_driver(), 'virtual_device_storage')
@@ -1037,7 +1014,7 @@ class VirtualDeviceStorage(VirtualDevice):
         self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.STORAGE))
         self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_LIST))
         self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_DELETE))
-        self.assertFalse(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_CLEAR))
+        self.assertTrue(self.dev.has_feature(FPrint.DeviceFeature.STORAGE_CLEAR))
 
     def test_duplicate_enroll(self):
         self.enroll_print('testprint', FPrint.Finger.LEFT_LITTLE)
@@ -1114,6 +1091,27 @@ class VirtualDeviceStorage(VirtualDevice):
         self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
                                                 FPrint.DeviceError.DATA_NOT_FOUND))
 
+    def test_clear_storage(self):
+        self.send_command('INSERT', 'p1')
+        l = self.dev.list_prints_sync()
+        print(l[0])
+        self.assertEqual(len(l), 1)
+        self.send_command('CONT')
+        self.dev.clear_storage_sync()
+        self.assertFalse(self.dev.list_prints_sync())
+
+    def test_clear_storage_error(self):
+        self.send_command('INSERT', 'p1')
+        l = self.dev.list_prints_sync()
+        print(l[0])
+        self.assertEqual(len(l), 1)
+
+        self.send_error(FPrint.DeviceError.PROTO)
+        with self.assertRaises(GLib.Error) as error:
+            self.dev.clear_storage_sync()
+        self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
+                                                FPrint.DeviceError.PROTO))
+
     def test_identify_match(self):
         rt = self.enroll_print('right-thumb', FPrint.Finger.RIGHT_THUMB)
         lt = self.enroll_print('left-thumb', FPrint.Finger.LEFT_THUMB)
@@ -1145,18 +1143,12 @@ class VirtualDeviceStorage(VirtualDevice):
                                                 FPrint.DeviceError.DATA_NOT_FOUND))
 
     def test_verify_missing_print(self):
-        with self.assertRaises(GLib.Error) as error:
-            self.check_verify(FPrint.Print.new(self.dev),
-                'not-existing-print', False, identify=False)
-        self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
-                                                FPrint.DeviceError.DATA_NOT_FOUND))
+        self.check_verify(FPrint.Print.new(self.dev),
+            'not-existing-print', False, identify=False)
 
     def test_identify_missing_print(self):
-        with self.assertRaises(GLib.Error) as error:
-            self.check_verify(FPrint.Print.new(self.dev),
-                              'not-existing-print', False, identify=True)
-        self.assertTrue(error.exception.matches(FPrint.DeviceError.quark(),
-                                                FPrint.DeviceError.DATA_NOT_FOUND))
+        self.check_verify(FPrint.Print.new(self.dev),
+                          'not-existing-print', False, identify=True)
 
 
 if __name__ == '__main__':

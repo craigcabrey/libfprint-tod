@@ -64,6 +64,11 @@ usb:v08FFp5731*
 usb:v5501p08FF*
  ID_AUTOSUSPEND=1
 
+# Supported by libfprint driver egis0570
+usb:v1C7Ap0570*
+usb:v1C7Ap0571*
+ ID_AUTOSUSPEND=1
+
 # Supported by libfprint driver elan
 usb:v04F3p0903*
 usb:v04F3p0907*
@@ -118,8 +123,17 @@ usb:v04F3p0C30*
 usb:v04F3p0C31*
 usb:v04F3p0C32*
 usb:v04F3p0C33*
+usb:v04F3p0C3D*
 usb:v04F3p0C42*
 usb:v04F3p0C4D*
+usb:v04F3p0C4F*
+usb:v04F3p0C63*
+usb:v04F3p0C6E*
+usb:v04F3p0C58*
+ ID_AUTOSUSPEND=1
+
+# Supported by libfprint driver elanmoc
+usb:v04F3p0C7E*
  ID_AUTOSUSPEND=1
 
 # Supported by libfprint driver etes603
@@ -128,11 +142,17 @@ usb:v1C7Ap0603*
 
 # Supported by libfprint driver goodixmoc
 usb:v27C6p5840*
-usb:v27C6p6496*
+usb:v27C6p609C*
 usb:v27C6p60A2*
-usb:v27C6p63AC*
 usb:v27C6p639C*
+usb:v27C6p63AC*
+usb:v27C6p6496*
+usb:v27C6p6584*
+usb:v27C6p658C*
+usb:v27C6p6592*
 usb:v27C6p6594*
+usb:v27C6p659C*
+usb:v27C6p6A94*
  ID_AUTOSUSPEND=1
 
 # Supported by libfprint driver nb1010
@@ -141,13 +161,14 @@ usb:v298Dp1010*
 
 # Supported by libfprint driver synaptics
 usb:v06CBp00BD*
-usb:v06CBp00E9*
 usb:v06CBp00DF*
 usb:v06CBp00F9*
 usb:v06CBp00FC*
 usb:v06CBp00C2*
 usb:v06CBp00C9*
 usb:v06CBp0100*
+usb:v06CBp00F0*
+usb:v06CBp0103*
  ID_AUTOSUSPEND=1
 
 # Supported by libfprint driver upeksonly
@@ -208,7 +229,6 @@ usb:v04F3p036B*
 usb:v04F3p0C00*
 usb:v04F3p0C4B*
 usb:v04F3p0C4C*
-usb:v04F3p0C4F*
 usb:v04F3p0C57*
 usb:v04F3p0C5E*
 usb:v04F3p2706*
@@ -225,6 +245,8 @@ usb:v06CBp00C4*
 usb:v06CBp00CB*
 usb:v06CBp00D8*
 usb:v06CBp00DA*
+usb:v06CBp00E7*
+usb:v06CBp00E9*
 usb:v0A5Cp5801*
 usb:v0A5Cp5805*
 usb:v0A5Cp5834*
@@ -250,7 +272,6 @@ usb:v147Ep1002*
 usb:v1491p0088*
 usb:v16D1p1027*
 usb:v1C7Ap0300*
-usb:v1C7Ap0570*
 usb:v1C7Ap0575*
 usb:v27C6p5042*
 usb:v27C6p5110*

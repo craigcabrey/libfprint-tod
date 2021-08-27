@@ -60,10 +60,11 @@ typedef void (*FpiSsmHandlerCallback)(FpiSsm   *ssm,
 
 /* for library and drivers */
 #define fpi_ssm_new(dev, handler, nr_states) \
-  fpi_ssm_new_full (dev, handler, nr_states, #nr_states)
+  fpi_ssm_new_full (dev, handler, nr_states, nr_states, #nr_states)
 FpiSsm *fpi_ssm_new_full (FpDevice             *dev,
                           FpiSsmHandlerCallback handler,
                           int                   nr_states,
+                          int                   start_cleanup,
                           const char           *machine_name);
 void fpi_ssm_free (FpiSsm *machine);
 void fpi_ssm_start (FpiSsm                 *ssm,
@@ -75,18 +76,15 @@ void fpi_ssm_start_subsm (FpiSsm *parent,
 void fpi_ssm_next_state (FpiSsm *machine);
 void fpi_ssm_jump_to_state (FpiSsm *machine,
                             int     state);
-void fpi_ssm_next_state_delayed (FpiSsm       *machine,
-                                 int           delay,
-                                 GCancellable *cancellable);
-void fpi_ssm_jump_to_state_delayed (FpiSsm       *machine,
-                                    int           state,
-                                    int           delay,
-                                    GCancellable *cancellable);
+void fpi_ssm_next_state_delayed (FpiSsm *machine,
+                                 int     delay);
+void fpi_ssm_jump_to_state_delayed (FpiSsm *machine,
+                                    int     state,
+                                    int     delay);
 void fpi_ssm_cancel_delayed_state_change (FpiSsm *machine);
 void fpi_ssm_mark_completed (FpiSsm *machine);
-void fpi_ssm_mark_completed_delayed (FpiSsm       *machine,
-                                     int           delay,
-                                     GCancellable *cancellable);
+void fpi_ssm_mark_completed_delayed (FpiSsm *machine,
+                                     int     delay);
 void fpi_ssm_mark_failed (FpiSsm *machine,
                           GError *error);
 void fpi_ssm_set_data (FpiSsm        *machine,
