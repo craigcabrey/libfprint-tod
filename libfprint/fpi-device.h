@@ -161,10 +161,6 @@ struct _FpDeviceClass
   gint       nr_enroll_stages;
   FpScanType scan_type;
 
-  /* Simple device temperature model constants */
-  gint32 temp_hot_seconds;
-  gint32 temp_cold_seconds;
-
   /* Callbacks */
   gint (*usb_discover) (GUsbDevice *usb_device);
   void (*probe)    (FpDevice *device);
@@ -176,18 +172,23 @@ struct _FpDeviceClass
   void (*capture)  (FpDevice *device);
   void (*list)     (FpDevice *device);
   void (*delete)   (FpDevice * device);
-  void (*clear_storage)  (FpDevice * device);
 
   void (*cancel)   (FpDevice *device);
-  void (*suspend)  (FpDevice *device);
-  void (*resume)   (FpDevice *device);
 
   /* Class elements added after tod-v1 */
   FpDeviceFeature features;
 
+  /* Simple device temperature model constants */
+  gint32 temp_hot_seconds;
+  gint32 temp_cold_seconds;
+
+  void   (*clear_storage)  (FpDevice * device);
+  void   (*suspend)  (FpDevice *device);
+  void   (*resume)   (FpDevice *device);
+
   /*< private >*/
   /* padding for future expansion */
-  gpointer _padding_dummy[31];
+  gpointer _padding_dummy[27];
 };
 
 void fpi_device_class_auto_initialize_features (FpDeviceClass *device_class);

@@ -32,8 +32,6 @@ struct _FpiDeviceFake
   gpointer        last_called_function;
   gboolean        return_action_error;
 
-  GCancellable   *ext_cancellable;
-
   GError         *ret_error;
   FpPrint        *ret_print;
   FpPrint        *ret_match;
@@ -41,11 +39,13 @@ struct _FpiDeviceFake
   FpImage        *ret_image;
   GPtrArray      *ret_list;
 
-  GError         *ret_suspend;
-  GError         *ret_resume;
-
   gpointer        action_data;
   gpointer        user_data;
+
+  GCancellable   *ext_cancellable;
+
+  GError         *ret_suspend;
+  GError         *ret_resume;
 
   FpDeviceFeature probe_features_update;
   FpDeviceFeature probe_features_value;
