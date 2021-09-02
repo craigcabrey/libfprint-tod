@@ -5,11 +5,26 @@ local:
     *;
 };
 
-LIBFPRINT_TOD_@tod_soversion@.0.1 {
+LIBFPRINT_TOD_@tod_soversion@_1.92 {
 global:
     fpi_device_class_auto_initialize_features;
+    fpi_device_clear_storage_complete;
     fpi_device_get_udev_data;
+    fpi_device_remove;
+    fpi_device_report_finger_status;
+    fpi_device_report_finger_status_changes;
+    fpi_device_update_features;
+    fpi_print_fill_from_user_id;
+    fpi_print_generate_user_id;
     fpi_spi_*;
-    fpi_ssm_spi_*;
     fpi_ssm_get_device;
+    fpi_ssm_spi_*;
 } LIBFPRINT_TOD_@tod_soversion@.0.0;
+
+LIBFPRINT_TOD_@tod_soversion@_1.94 {
+global:
+    fpi_device_critical_enter;
+    fpi_device_critical_leave;
+    fpi_device_resume_complete;
+    fpi_device_suspend_complete;
+} LIBFPRINT_TOD_@tod_soversion@_1.92;
