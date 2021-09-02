@@ -297,8 +297,7 @@ if get_option('tod')
         'fake_test_dev_tod_current': meson.current_build_dir(),
     }
 
-    machine = run_command(meson.get_compiler('c'), '-dumpmachine').stdout().strip()
-    if machine.startswith('x86_64-')
+    if host_machine.cpu_family() == 'x86_64'
         tod_dirs += {
             'fake_test_dev_tod_v1': meson.current_source_dir() / 'tod-drivers',
         }
