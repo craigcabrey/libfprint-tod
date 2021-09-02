@@ -18,6 +18,10 @@ global:
     fpi_print_generate_user_id;
     fpi_spi_*;
     fpi_ssm_get_device;
+    fpi_ssm_jump_to_state_delayed;
+    fpi_ssm_mark_completed_delayed;
+    fpi_ssm_new_full;
+    fpi_ssm_next_state_delayed;
     fpi_ssm_spi_*;
 } LIBFPRINT_TOD_@tod_soversion@.0.0;
 
