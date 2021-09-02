@@ -239,15 +239,21 @@ if valgrind.found()
 endif
 
 if get_option('tod')
+    tod_test_driver_name = 'fake_test_dev_tod'
     tod_envs = envs
     tod_envs.set('FP_TOD_KEEP_MODULES_OPEN', 'TRUE')
     tod_envs.set('FP_VIRTUAL_FAKE_DEVICE', 'yes')
-    tod_envs.set('FP_TOD_TEST_DRIVER_NAME', 'fake_test_dev_tod')
+    tod_envs.set('FP_TOD_TEST_DRIVER_NAME', tod_test_driver_name)
     tod_envs.prepend('LD_LIBRARY_PATH',
         meson.build_root() / 'libfprint',
         meson.build_root() / 'libfprint' / 'tod')
     tod_c_args = [
         '-DTEST_TOD_DRIVER=1',
+        '-DTOD_CURRENT_VERSION=@0@'.format(tod_soversion),
+        '-DTOD_CURRENT_SUBVERSION="@0@.@1@"'.format(
+            meson.project_version().split('.')[0],
+            meson.project_version().split('.')[1],
+        ),
     ]
 
     fake_driver = shared_module('device-fake-tod-driver',
@@ -294,19 +300,29 @@ if get_option('tod')
     ]
 
     tod_dirs = {
-        'fake_test_dev_tod_current': meson.current_build_dir(),
+        tod_test_driver_name + '_current': meson.current_build_dir(),
     }
 
     if host_machine.cpu_family() == 'x86_64'
-        tod_dirs += {
-            'fake_test_dev_tod_v1': meson.current_source_dir() / 'tod-drivers',
-        }
+        tod_test_versions = [
+            'v1+1.90',
+            'v1+1.94'
+        ]
+
+        foreach tod_version: tod_test_versions
+            tod_dirs += {
+                tod_test_driver_name + '_' + tod_version:
+                    meson.current_source_dir() / 'tod-drivers' / '-'.join([
+                        'tod', host_machine.cpu_family(), tod_version
+                    ])
+            }
+        endforeach
     endif
 
     foreach test_name: tod_unit_tests
         basename = 'test-' + test_name
         sufix = test_name.endswith('-tod') ? '' : '-tod'
-        test_name = test_name + sufix
+        tod_test_name = test_name + sufix
         test_exe = executable(basename + sufix,
             sources: basename + '.c',
             dependencies: libfprint_private_dep,
@@ -323,7 +339,7 @@ if get_option('tod')
             tod_test_envs.set('FP_TOD_DRIVERS_DIR', tod_dir)
             tod_test_envs.set('FP_TOD_TEST_DRIVER_NAME', tod_driver)
 
-            test(test_name + '-' + tod_driver,
+            test(tod_test_name + '-' + tod_driver,
                 test_exe,
                 suite: ['unit-tests', 'tod', tod_driver],
                 env: tod_test_envs,
