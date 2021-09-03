@@ -231,9 +231,6 @@ test_usb_enums (void)
 int
 main (int argc, char *argv[])
 {
-  if (!strstr (g_getenv ("FP_TOD_TEST_DRIVER_NAME"), "v1"))
-    return 77;
-
   g_test_init (&argc, &argv, NULL);
 
   g_test_add_func ("/type/device/private", test_device_type);

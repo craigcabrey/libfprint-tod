@@ -293,18 +293,21 @@ if get_option('tod')
         dependencies: libfprint_private_dep,
         install: false)
 
-    tod_unit_tests = [
+    tod_standalone_tests = [
+        'fp-todv1-types',
+    ]
+
+    tod_drivers_tests = [
         'fp-context-tod',
         'fp-device-tod',
         'fpi-device',
-        'fp-todv1-types',
     ]
 
     tod_driver_infos = {
         tod_test_driver_name + '_current': {
             'tod-driver': tod_test_driver_name,
             'tod-dir': meson.current_build_dir(),
-            'supported-tests': tod_unit_tests,
+            'supported-tests': tod_drivers_tests,
         }
     }
 
@@ -322,7 +325,7 @@ if get_option('tod')
                 tod_test_driver_name + '_' + tod_version: {
                     'tod-driver': tod_test_driver_name,
                     'tod-dir': tod_dir,
-                    'supported-tests': tod_unit_tests,
+                    'supported-tests': tod_drivers_tests,
                 }
             }
 
@@ -338,10 +341,11 @@ if get_option('tod')
         endforeach
     endif
 
-    foreach test_name: tod_unit_tests
+    foreach test_name: tod_drivers_tests + tod_standalone_tests
         basename = 'test-' + test_name
         sufix = test_name.endswith('-tod') ? '' : '-tod'
         tod_test_name = test_name + sufix
+        tod_suites = ['unit-tests', 'tod']
         test_exe = executable(basename + sufix,
             sources: basename + '.c',
             dependencies: libfprint_private_dep,
@@ -363,10 +367,18 @@ if get_option('tod')
 
             test(tod_test_name + '-' + tod_driver,
                 test_exe,
-                suite: ['unit-tests', 'tod', tod_driver],
+                suite: tod_suites + [tod_driver],
                 env: tod_test_envs,
                 depends: fake_driver,
             )
         endforeach
+
+        if test_name in tod_standalone_tests
+            test(tod_test_name,
+                test_exe,
+                suite: tod_suites,
+                env: tod_envs,
+            )
+        endif
     endforeach
 endif
