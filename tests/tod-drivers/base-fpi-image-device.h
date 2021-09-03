@@ -24,60 +24,38 @@
 typedef struct _FpImageDevice FpImageDevice;
 
 typedef enum {
-  FPI_IMAGE_DEVICE_STATE_TODV1_INACTIVE,
-  FPI_IMAGE_DEVICE_STATE_TODV1_AWAIT_FINGER_ON,
-  FPI_IMAGE_DEVICE_STATE_TODV1_CAPTURE,
-  FPI_IMAGE_DEVICE_STATE_TODV1_AWAIT_FINGER_OFF,
-} FpiImageDeviceStateTODV1;
+  FPI_IMAGE_DEVICE_STATE_TODV1_90_1_INACTIVE,
+  FPI_IMAGE_DEVICE_STATE_TODV1_90_1_AWAIT_FINGER_ON,
+  FPI_IMAGE_DEVICE_STATE_TODV1_90_1_CAPTURE,
+  FPI_IMAGE_DEVICE_STATE_TODV1_90_1_AWAIT_FINGER_OFF,
+} FpiImageDeviceStateTODV1_90_1;
 
-typedef struct _FpImageDeviceClassTODV1
+typedef enum {
+  FPI_IMAGE_DEVICE_STATE_TODV1_92_0_INACTIVE,
+  FPI_IMAGE_DEVICE_STATE_TODV1_92_0_AWAIT_FINGER_ON,
+  FPI_IMAGE_DEVICE_STATE_TODV1_92_0_CAPTURE,
+  FPI_IMAGE_DEVICE_STATE_TODV1_92_0_AWAIT_FINGER_OFF,
+  FPI_IMAGE_DEVICE_STATE_TODV1_92_0_ACTIVATING,
+  FPI_IMAGE_DEVICE_STATE_TODV1_92_0_DEACTIVATING,
+  FPI_IMAGE_DEVICE_STATE_TODV1_92_0_IDLE,
+} FpiImageDeviceStateTODV1_90_4;
+
+typedef struct _FpImageDeviceClassTODV1_90_1
 {
-  FpDeviceClassTODV1 parent_class;
+  FpDeviceClassTODV1_90_1 parent_class;
 
-  gint               bz3_threshold;
-  gint               img_width;
-  gint               img_height;
+  gint                    bz3_threshold;
+  gint                    img_width;
+  gint                    img_height;
 
   void (*img_open)(FpImageDevice *dev);
   void (*img_close)(FpImageDevice *dev);
   void (*activate)(FpImageDevice *dev);
-  void (*change_state)(FpImageDevice           *dev,
-                       FpiImageDeviceStateTODV1 state);
+  void (*change_state)(FpImageDevice                *dev,
+                       FpiImageDeviceStateTODV1_90_1 state);
   void (*deactivate)(FpImageDevice *dev);
 
   /*< private >*/
   /* padding for future expansion */
   gpointer _padding_dummy[32];
-} FpImageDeviceClassTODV1;
-
-/* fpi-image */
-
-typedef enum {
-  FPI_IMAGE_TODV1_V_FLIPPED       = 1 << 0,
-  FPI_IMAGE_TODV1_H_FLIPPED       = 1 << 1,
-  FPI_IMAGE_TODV1_COLORS_INVERTED = 1 << 2,
-  FPI_IMAGE_TODV1_PARTIAL         = 1 << 3,
-} FpiImageFlagsTODV1;
-
-typedef struct _FpImageTODV1
-{
-  /*< private >*/
-  GObject parent;
-
-  /*< public >*/
-  guint              width;
-  guint              height;
-
-  gdouble            ppmm;
-
-  FpiImageFlagsTODV1 flags;
-
-  /*< private >*/
-  guint8    *data;
-  guint8    *binarized;
-
-  GPtrArray *minutiae;
-  guint      ref_count;
-
-  gpointer   _padding_dummy[32];
-} FpImageTODV1;
+} FpImageDeviceClassTODV1_90_1;

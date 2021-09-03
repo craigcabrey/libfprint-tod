@@ -21,15 +21,15 @@
 
 #include "base-fpi-device.h"
 
-typedef struct _FpiSpiTransferTODV1 FpiSpiTransferTODV1;
-typedef struct _FpiSsm              FpiSsm;
+typedef struct _FpiSpiTransferTODV1_92_0 FpiSpiTransferTODV1_92_0;
+typedef struct _FpiSsm                   FpiSsm;
 
-typedef void (*FpiSpiTransferCallbackTODV1)(FpiSpiTransferTODV1 *transfer,
-                                            FpDevice            *dev,
-                                            gpointer             user_data,
-                                            GError              *error);
+typedef void (*FpiSpiTransferCallbackTODV1_92_0)(FpiSpiTransferTODV1_92_0 *transfer,
+                                                 FpDevice                 *dev,
+                                                 gpointer                  user_data,
+                                                 GError                   *error);
 
-struct _FpiSpiTransferTODV1
+struct _FpiSpiTransferTODV1_92_0
 {
   /*< public >*/
   FpDevice *device;
@@ -48,8 +48,8 @@ struct _FpiSpiTransferTODV1
   int   spidev_fd;
 
   /* Callbacks */
-  gpointer                    user_data;
-  FpiSpiTransferCallbackTODV1 callback;
+  gpointer                         user_data;
+  FpiSpiTransferCallbackTODV1_92_0 callback;
 
   /* Data free function */
   GDestroyNotify free_buffer_wr;

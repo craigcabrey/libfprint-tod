@@ -23,22 +23,22 @@
 
 #include "base-fpi-device.h"
 
-typedef struct _FpiUsbTransferTODV1 FpiUsbTransferTODV1;
-typedef struct _FpiSsm              FpiSsm;
+typedef struct _FpiUsbTransferTODV1_90_1 FpiUsbTransferTODV1_90_1;
+typedef struct _FpiSsm                   FpiSsm;
 
-typedef void (*FpiUsbTransferCallbackTODV1)(FpiUsbTransferTODV1 *transfer,
-                                            FpDevice            *dev,
-                                            gpointer             user_data,
-                                            GError              *error);
+typedef void (*FpiUsbTransferCallbackTODV1_90_1)(FpiUsbTransferTODV1_90_1 *transfer,
+                                                 FpDevice                 *dev,
+                                                 gpointer                  user_data,
+                                                 GError                   *error);
 
 typedef enum  {
-  FP_TRANSFER_TODV1_NONE = -1,
-  FP_TRANSFER_TODV1_CONTROL = 0,
-  FP_TRANSFER_TODV1_BULK = 2,
-  FP_TRANSFER_TODV1_INTERRUPT = 3,
-} FpiTransferTypeTODV1;
+  FP_TRANSFER_TODV1_90_1_NONE = -1,
+  FP_TRANSFER_TODV1_90_1_CONTROL = 0,
+  FP_TRANSFER_TODV1_90_1_BULK = 2,
+  FP_TRANSFER_TODV1_90_1_INTERRUPT = 3,
+} FpiTransferTypeTODV1_90_3;
 
-struct _FpiUsbTransferTODV1
+struct _FpiUsbTransferTODV1_90_1
 {
   /*< public >*/
   FpDevice *device;
@@ -54,8 +54,8 @@ struct _FpiUsbTransferTODV1
   guint ref_count;
 
   /* USB Transfer information */
-  FpiTransferTypeTODV1 type;
-  guint8               endpoint;
+  FpiTransferTypeTODV1_90_3 type;
+  guint8                    endpoint;
 
   /* Control Transfer options */
   GUsbDeviceDirection   direction;
@@ -69,8 +69,8 @@ struct _FpiUsbTransferTODV1
   gboolean short_is_error;
 
   /* Callbacks */
-  gpointer                    user_data;
-  FpiUsbTransferCallbackTODV1 callback;
+  gpointer                         user_data;
+  FpiUsbTransferCallbackTODV1_90_1 callback;
 
   /* Data free function */
   GDestroyNotify free_buffer;

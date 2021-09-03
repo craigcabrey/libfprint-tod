@@ -25,6 +25,7 @@
 #include "tod-drivers/base-fp-device.h"
 #include "tod-drivers/base-fp-print.h"
 #include "tod-drivers/base-fpi-device.h"
+#include "tod-drivers/base-fpi-image.h"
 #include "tod-drivers/base-fpi-image-device.h"
 #include "tod-drivers/base-fpi-spi.h"
 #include "tod-drivers/base-fpi-usb.h"
@@ -37,6 +38,9 @@ check_enum_compatibility (GType old_type, GType current_type)
   int i;
 
   g_debug ("Checking Enum %s", g_type_name (current_type));
+
+  g_assert_true (G_TYPE_IS_ENUM (old_type));
+  g_assert_true (G_TYPE_IS_ENUM (current_type));
 
   for (i = 0; g_enum_get_value (old_class, i); ++i)
     {
@@ -58,6 +62,9 @@ check_flags_compatibility (GType old_type, GType current_type)
   int i;
 
   g_debug ("Checking Flags %s", g_type_name (current_type));
+
+  g_assert_true (G_TYPE_IS_FLAGS (old_type));
+  g_assert_true (G_TYPE_IS_FLAGS (current_type));
 
   for (i = 0; i < old_class->n_values; ++i)
     {
@@ -83,149 +90,220 @@ check_compatiblity_auto (GType old_type, GType current_type)
   g_assert_not_reached ();
 }
 
-#define check_type_compatibility(type) \
-  check_compatiblity_auto (type ## _TOD_V1, type)
+#define check_type_compatibility(type, major, minor, micro) \
+  g_debug ("Checking " # type " @ " G_STRLOC); \
+  check_compatiblity_auto (type ## _TOD_V ## major ## _ ## minor ## _ ## micro, type);
 
-#define check_struct_size(type) \
-  g_debug ("Checking " # type " size"); \
-  g_assert_cmpuint (sizeof (type ## TODV1), ==, sizeof (type))
+#define tod_versioned_type(type, major, minor, micro) \
+  type ## TODV ## major ## _ ## minor ## _ ## micro
 
-#define check_struct_member(type, member) \
-  g_debug ("Checking " # type "'s " # member " offset"); \
-  g_assert_cmpuint (G_STRUCT_OFFSET (type ## TODV1, member), ==, G_STRUCT_OFFSET (type, member))
+#define check_struct_size(type, major, minor, micro) \
+  g_debug ("Checking " # type " size  @ " G_STRLOC); \
+  g_assert_cmpuint (sizeof (tod_versioned_type (type, major, minor, micro)), \
+                    ==, \
+                    sizeof (type))
+
+#define check_struct_member(type, major, minor, micro, member) \
+  g_debug ("Checking " # type "'s " # member " offset @ " G_STRLOC); \
+  g_assert_cmpuint (G_STRUCT_OFFSET (tod_versioned_type (type, major, minor, micro), member), \
+                    ==, \
+                    G_STRUCT_OFFSET (type, member))
 
 static void
 test_device_type (void)
 {
-  check_struct_size (FpIdEntry);
-  check_struct_size (FpDeviceClass);
+  check_struct_size (FpIdEntry, 1, 90, 1);
+  check_struct_size (FpIdEntry, 1, 92, 0);
+  check_struct_size (FpDeviceClass, 1, 90, 1);
+  check_struct_size (FpDeviceClass, 1, 92, 0);
+  check_struct_size (FpDeviceClass, 1, 94, 0);
 
-  check_struct_member (FpIdEntry, virtual_envvar);
-  check_struct_member (FpIdEntry, driver_data);
+  check_struct_member (FpIdEntry, 1, 90, 1, virtual_envvar);
+  check_struct_member (FpIdEntry, 1, 90, 1, driver_data);
 
-  check_struct_member (FpDeviceClass, id);
-  check_struct_member (FpDeviceClass, full_name);
-  check_struct_member (FpDeviceClass, type);
-  check_struct_member (FpDeviceClass, id_table);
+  check_struct_member (FpDeviceClass, 1, 90, 1, id);
+  check_struct_member (FpDeviceClass, 1, 90, 1, full_name);
+  check_struct_member (FpDeviceClass, 1, 90, 1, type);
+  check_struct_member (FpDeviceClass, 1, 90, 1, id_table);
 
-  check_struct_member (FpDeviceClass, nr_enroll_stages);
-  check_struct_member (FpDeviceClass, scan_type);
+  check_struct_member (FpDeviceClass, 1, 90, 1, nr_enroll_stages);
+  check_struct_member (FpDeviceClass, 1, 90, 1, scan_type);
 
-  check_struct_member (FpDeviceClass, usb_discover);
-  check_struct_member (FpDeviceClass, probe);
-  check_struct_member (FpDeviceClass, open);
-  check_struct_member (FpDeviceClass, close);
-  check_struct_member (FpDeviceClass, enroll);
-  check_struct_member (FpDeviceClass, verify);
-  check_struct_member (FpDeviceClass, identify);
-  check_struct_member (FpDeviceClass, capture);
-  check_struct_member (FpDeviceClass, list);
-  check_struct_member (FpDeviceClass, delete);
-  check_struct_member (FpDeviceClass, cancel);
+  check_struct_member (FpDeviceClass, 1, 90, 1, usb_discover);
+  check_struct_member (FpDeviceClass, 1, 90, 1, probe);
+  check_struct_member (FpDeviceClass, 1, 90, 1, open);
+  check_struct_member (FpDeviceClass, 1, 90, 1, close);
+  check_struct_member (FpDeviceClass, 1, 90, 1, enroll);
+  check_struct_member (FpDeviceClass, 1, 90, 1, verify);
+  check_struct_member (FpDeviceClass, 1, 90, 1, identify);
+  check_struct_member (FpDeviceClass, 1, 90, 1, capture);
+  check_struct_member (FpDeviceClass, 1, 90, 1, list);
+  check_struct_member (FpDeviceClass, 1, 90, 1, delete);
+  check_struct_member (FpDeviceClass, 1, 90, 1, cancel);
+
+  /* Version 1.92 */
+  check_struct_member (FpIdEntry, 1, 92, 0, virtual_envvar);
+  check_struct_member (FpIdEntry, 1, 92, 0, driver_data);
+  check_struct_member (FpIdEntry, 1, 92, 0, udev_types);
+  check_struct_member (FpIdEntry, 1, 92, 0, spi_acpi_id);
+  check_struct_member (FpIdEntry, 1, 92, 0, hid_id);
+
+  check_struct_member (FpDeviceClass, 1, 92, 0, usb_discover);
+  check_struct_member (FpDeviceClass, 1, 92, 0, probe);
+  check_struct_member (FpDeviceClass, 1, 92, 0, open);
+  check_struct_member (FpDeviceClass, 1, 92, 0, close);
+  check_struct_member (FpDeviceClass, 1, 92, 0, enroll);
+  check_struct_member (FpDeviceClass, 1, 92, 0, verify);
+  check_struct_member (FpDeviceClass, 1, 92, 0, identify);
+  check_struct_member (FpDeviceClass, 1, 92, 0, capture);
+  check_struct_member (FpDeviceClass, 1, 92, 0, list);
+  check_struct_member (FpDeviceClass, 1, 92, 0, delete);
+  check_struct_member (FpDeviceClass, 1, 92, 0, cancel);
+
+  check_struct_member (FpDeviceClass, 1, 92, 0, id);
+  check_struct_member (FpDeviceClass, 1, 92, 0, full_name);
+  check_struct_member (FpDeviceClass, 1, 92, 0, type);
+  check_struct_member (FpDeviceClass, 1, 92, 0, id_table);
+
+  check_struct_member (FpDeviceClass, 1, 92, 0, nr_enroll_stages);
+  check_struct_member (FpDeviceClass, 1, 92, 0, scan_type);
+
+  check_struct_member (FpDeviceClass, 1, 92, 0, features);
+
+  /* Version 1.94 */
+  check_struct_member (FpDeviceClass, 1, 94, 0, usb_discover);
+  check_struct_member (FpDeviceClass, 1, 94, 0, probe);
+  check_struct_member (FpDeviceClass, 1, 94, 0, open);
+  check_struct_member (FpDeviceClass, 1, 94, 0, close);
+  check_struct_member (FpDeviceClass, 1, 94, 0, enroll);
+  check_struct_member (FpDeviceClass, 1, 94, 0, verify);
+  check_struct_member (FpDeviceClass, 1, 94, 0, identify);
+  check_struct_member (FpDeviceClass, 1, 94, 0, capture);
+  check_struct_member (FpDeviceClass, 1, 94, 0, list);
+  check_struct_member (FpDeviceClass, 1, 94, 0, delete);
+  check_struct_member (FpDeviceClass, 1, 94, 0, cancel);
+
+  check_struct_member (FpDeviceClass, 1, 94, 0, id);
+  check_struct_member (FpDeviceClass, 1, 94, 0, full_name);
+  check_struct_member (FpDeviceClass, 1, 94, 0, type);
+  check_struct_member (FpDeviceClass, 1, 94, 0, id_table);
+
+  check_struct_member (FpDeviceClass, 1, 94, 0, nr_enroll_stages);
+  check_struct_member (FpDeviceClass, 1, 94, 0, scan_type);
+
+  check_struct_member (FpDeviceClass, 1, 94, 0, features);
 }
 
 static void
 test_image_device_private (void)
 {
-  check_struct_size (FpImage);
-  check_struct_size (FpImageDeviceClass);
+  check_struct_size (FpImage, 1, 90, 1);
+  check_struct_size (FpImageDeviceClass, 1, 90, 1);
 
-  check_struct_member (FpImageDeviceClass, bz3_threshold);
-  check_struct_member (FpImageDeviceClass, img_width);
-  check_struct_member (FpImageDeviceClass, img_height);
-  check_struct_member (FpImageDeviceClass, img_open);
-  check_struct_member (FpImageDeviceClass, img_close);
-  check_struct_member (FpImageDeviceClass, activate);
-  check_struct_member (FpImageDeviceClass, change_state);
-  check_struct_member (FpImageDeviceClass, deactivate);
+  check_struct_member (FpImageDeviceClass, 1, 90, 1, bz3_threshold);
+  check_struct_member (FpImageDeviceClass, 1, 90, 1, img_width);
+  check_struct_member (FpImageDeviceClass, 1, 90, 1, img_height);
+  check_struct_member (FpImageDeviceClass, 1, 90, 1, img_open);
+  check_struct_member (FpImageDeviceClass, 1, 90, 1, img_close);
+  check_struct_member (FpImageDeviceClass, 1, 90, 1, activate);
+  check_struct_member (FpImageDeviceClass, 1, 90, 1, change_state);
+  check_struct_member (FpImageDeviceClass, 1, 90, 1, deactivate);
 }
 
 static void
 test_usb_private (void)
 {
-  check_struct_size (FpiUsbTransfer);
+  check_struct_size (FpiUsbTransfer, 1, 90, 1);
 
-  check_struct_member (FpiUsbTransfer, device);
-  check_struct_member (FpiUsbTransfer, ssm);
-  check_struct_member (FpiUsbTransfer, length);
-  check_struct_member (FpiUsbTransfer, actual_length);
-  check_struct_member (FpiUsbTransfer, buffer);
-  check_struct_member (FpiUsbTransfer, ref_count);
-  check_struct_member (FpiUsbTransfer, type);
-  check_struct_member (FpiUsbTransfer, endpoint);
-  check_struct_member (FpiUsbTransfer, direction);
-  check_struct_member (FpiUsbTransfer, request_type);
-  check_struct_member (FpiUsbTransfer, recipient);
-  check_struct_member (FpiUsbTransfer, request);
-  check_struct_member (FpiUsbTransfer, value);
-  check_struct_member (FpiUsbTransfer, idx);
-  check_struct_member (FpiUsbTransfer, short_is_error);
-  check_struct_member (FpiUsbTransfer, user_data);
-  check_struct_member (FpiUsbTransfer, callback);
-  check_struct_member (FpiUsbTransfer, free_buffer);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, device);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, ssm);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, length);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, actual_length);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, buffer);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, ref_count);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, type);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, endpoint);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, direction);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, request_type);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, recipient);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, request);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, value);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, idx);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, short_is_error);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, user_data);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, callback);
+  check_struct_member (FpiUsbTransfer, 1, 90, 1, free_buffer);
 }
 
 static void
 test_spi_private (void)
 {
-  check_struct_size (FpiSpiTransfer);
+  check_struct_size (FpiSpiTransfer, 1, 92, 0);
 
-  check_struct_member (FpiSpiTransfer, device);
-  check_struct_member (FpiSpiTransfer, ssm);
-  check_struct_member (FpiSpiTransfer, length_wr);
-  check_struct_member (FpiSpiTransfer, length_rd);
-  check_struct_member (FpiSpiTransfer, buffer_wr);
-  check_struct_member (FpiSpiTransfer, buffer_rd);
-  check_struct_member (FpiSpiTransfer, ref_count);
-  check_struct_member (FpiSpiTransfer, spidev_fd);
-  check_struct_member (FpiSpiTransfer, user_data);
-  check_struct_member (FpiSpiTransfer, callback);
-  check_struct_member (FpiSpiTransfer, free_buffer_wr);
-  check_struct_member (FpiSpiTransfer, free_buffer_rd);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, device);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, ssm);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, length_wr);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, length_rd);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, buffer_wr);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, buffer_rd);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, ref_count);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, spidev_fd);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, user_data);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, callback);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, free_buffer_wr);
+  check_struct_member (FpiSpiTransfer, 1, 92, 0, free_buffer_rd);
 }
 
 static void
 test_device_public_enums (void)
 {
-  check_type_compatibility (FP_TYPE_DEVICE_TYPE);
-  check_type_compatibility (FP_TYPE_SCAN_TYPE);
-  check_type_compatibility (FP_TYPE_DEVICE_RETRY);
-  check_type_compatibility (FP_TYPE_DEVICE_ERROR);
-  check_type_compatibility (FP_TYPE_DEVICE_FEATURE);
-  check_type_compatibility (FPI_TYPE_DEVICE_UDEV_SUBTYPE_FLAGS);
+  check_type_compatibility (FP_TYPE_DEVICE_TYPE, 1, 90, 1);
+  check_type_compatibility (FP_TYPE_SCAN_TYPE, 1, 90, 1);
+  check_type_compatibility (FP_TYPE_DEVICE_RETRY, 1, 90, 1);
+  check_type_compatibility (FP_TYPE_DEVICE_ERROR, 1, 90, 1);
+  check_type_compatibility (FP_TYPE_DEVICE_ERROR, 1, 90, 3);
+  check_type_compatibility (FP_TYPE_DEVICE_ERROR, 1, 90, 4);
+  check_type_compatibility (FP_TYPE_DEVICE_ERROR, 1, 94, 0);
+  check_type_compatibility (FP_TYPE_DEVICE_FEATURE, 1, 92, 0);
+  check_type_compatibility (FP_TYPE_DEVICE_FEATURE, 1, 94, 0);
+  check_type_compatibility (FP_TYPE_TEMPERATURE, 1, 94, 0);
+  check_type_compatibility (FPI_TYPE_DEVICE_UDEV_SUBTYPE_FLAGS, 1, 92, 0);
 }
 
 static void
 test_device_private_enums (void)
 {
-  check_type_compatibility (FPI_TYPE_DEVICE_ACTION);
+  check_type_compatibility (FPI_TYPE_DEVICE_ACTION, 1, 90, 1);
+  check_type_compatibility (FPI_TYPE_DEVICE_ACTION, 1, 92, 0);
 }
 
 static void
 test_print_public_enums (void)
 {
-  check_type_compatibility (FP_TYPE_FINGER);
-  check_type_compatibility (FP_TYPE_FINGER_STATUS_FLAGS);
+  check_type_compatibility (FP_TYPE_FINGER, 1, 90, 1);
+  check_type_compatibility (FP_TYPE_FINGER_STATUS_FLAGS, 1, 90, 4);
 }
 
 static void
 test_print_private_enums (void)
 {
-  check_type_compatibility (FPI_TYPE_PRINT_TYPE);
-  check_type_compatibility (FPI_TYPE_MATCH_RESULT);
+  check_type_compatibility (FPI_TYPE_PRINT_TYPE, 1, 90, 1);
+  check_type_compatibility (FPI_TYPE_MATCH_RESULT, 1, 90, 1);
 }
 
 static void
 test_image_device_enums (void)
 {
-  check_type_compatibility (FPI_TYPE_IMAGE_FLAGS);
-  check_type_compatibility (FPI_TYPE_IMAGE_DEVICE_STATE);
+  check_type_compatibility (FPI_TYPE_IMAGE_FLAGS, 1, 90, 1);
+  check_type_compatibility (FPI_TYPE_IMAGE_FLAGS, 1, 90, 2);
+  check_type_compatibility (FPI_TYPE_IMAGE_DEVICE_STATE, 1, 90, 1);
+  check_type_compatibility (FPI_TYPE_IMAGE_DEVICE_STATE, 1, 90, 4);
 }
 
 static void
 test_usb_enums (void)
 {
-  check_type_compatibility (FPI_TYPE_TRANSFER_TYPE);
+  check_type_compatibility (FPI_TYPE_TRANSFER_TYPE, 1, 90, 3);
 }
 
 int
