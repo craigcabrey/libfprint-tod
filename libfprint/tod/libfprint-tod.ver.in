@@ -1,6 +1,10 @@
 LIBFPRINT_TOD_@tod_soversion@.0.0 {
 global:
 	fpi_*;
+    fpi_ssm_new_full;
+    fpi_ssm_jump_to_state_delayed;
+    fpi_ssm_mark_completed_delayed;
+    fpi_ssm_next_state_delayed;
 local:
     *;
 };

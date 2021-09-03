@@ -26,12 +26,19 @@ libfprint_tod_private = static_library('fprint-tod-private',
     install: false,
 )
 
-tod_sources = []
+tod_sources = [
+    'tod-wrappers.c',
+    'tod-symbols.h',
+]
 foreach source: libfprint_private_sources
     tod_sources += '..' / source
 endforeach
 
 libfprint_tod = library(versioned_libname.split('lib')[1] + '-tod',
+    c_args: [
+        '-DTOD_LIBRARY=1',
+        '-include', '@0@'.format(files('tod-symbols.h')[0]),
+    ],
     sources: [
         tod_sources,
     ],

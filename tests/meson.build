@@ -326,11 +326,6 @@ if get_option('tod')
                 }
             }
 
-            if tod_version != 'v1+1.94'
-                # TODO: Adapt symbols to new ABI
-                continue
-            endif
-
             tod_driver_infos += {
                 tod_ssm_test_driver_name + '_' + tod_version: {
                     'tod-driver': tod_ssm_test_driver_name,
