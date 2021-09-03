@@ -240,6 +240,7 @@ endif
 
 if get_option('tod')
     tod_test_driver_name = 'fake_test_dev_tod'
+    tod_ssm_test_driver_name = 'ssm_test_dev_tod'
     tod_envs = envs
     tod_envs.set('FP_TOD_KEEP_MODULES_OPEN', 'TRUE')
     tod_envs.set('FP_VIRTUAL_FAKE_DEVICE', 'yes')
@@ -299,22 +300,45 @@ if get_option('tod')
         'fp-todv1-types',
     ]
 
-    tod_dirs = {
-        tod_test_driver_name + '_current': meson.current_build_dir(),
+    tod_driver_infos = {
+        tod_test_driver_name + '_current': {
+            'tod-driver': tod_test_driver_name,
+            'tod-dir': meson.current_build_dir(),
+            'supported-tests': tod_unit_tests,
+        }
     }
 
     if host_machine.cpu_family() == 'x86_64'
         tod_test_versions = [
             'v1+1.90',
-            'v1+1.94'
+            'v1+1.94',
         ]
 
         foreach tod_version: tod_test_versions
-            tod_dirs += {
-                tod_test_driver_name + '_' + tod_version:
-                    meson.current_source_dir() / 'tod-drivers' / '-'.join([
-                        'tod', host_machine.cpu_family(), tod_version
-                    ])
+            tod_dir = meson.current_source_dir() / 'tod-drivers' / '-'.join([
+                'tod', host_machine.cpu_family(), tod_version
+            ])
+            tod_driver_infos += {
+                tod_test_driver_name + '_' + tod_version: {
+                    'tod-driver': tod_test_driver_name,
+                    'tod-dir': tod_dir,
+                    'supported-tests': tod_unit_tests,
+                }
+            }
+
+            if tod_version != 'v1+1.94'
+                # TODO: Adapt symbols to new ABI
+                continue
+            endif
+
+            tod_driver_infos += {
+                tod_ssm_test_driver_name + '_' + tod_version: {
+                    'tod-driver': tod_ssm_test_driver_name,
+                    'tod-dir': tod_dir,
+                    'supported-tests': [
+                        'fp-context-tod',
+                    ],
+                }
             }
         endforeach
     endif
@@ -333,10 +357,13 @@ if get_option('tod')
             link_with: test_utils_tod,
         )
 
-        foreach tod_driver, tod_dir : tod_dirs
+        foreach tod_driver, tod_driver_info : tod_driver_infos
+            if test_name not in tod_driver_info.get('supported-tests')
+                continue
+            endif
             tod_test_envs = tod_envs
             tod_test_envs.prepend('FP_DRIVERS_WHITELIST', tod_driver)
-            tod_test_envs.set('FP_TOD_DRIVERS_DIR', tod_dir)
+            tod_test_envs.set('FP_TOD_DRIVERS_DIR', tod_driver_info.get('tod-dir'))
             tod_test_envs.set('FP_TOD_TEST_DRIVER_NAME', tod_driver)
 
             test(tod_test_name + '-' + tod_driver,
