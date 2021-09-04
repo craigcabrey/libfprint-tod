@@ -37,18 +37,26 @@ check_enum_compatibility (GType old_type, GType current_type)
   g_autoptr(GEnumClass) current_class = g_type_class_ref (current_type);
   int i;
 
-  g_debug ("Checking Enum %s", g_type_name (current_type));
+  g_debug ("Checking Enum %s vs %s",
+           g_type_name (current_type),
+           g_type_name (old_type));
 
   g_assert_true (G_TYPE_IS_ENUM (old_type));
   g_assert_true (G_TYPE_IS_ENUM (current_type));
+  g_assert_cmpuint (old_class->n_values, <=, current_class->n_values);
 
-  for (i = 0; g_enum_get_value (old_class, i); ++i)
+  for (i = old_class->minimum; i <= old_class->maximum; i++)
     {
       GEnumValue *old_value = g_enum_get_value (old_class, i);
-      GEnumValue *current_value = g_enum_get_value_by_nick (current_class,
-                                                            old_value->value_nick);
+      GEnumValue *current_value;
 
-      g_debug (" .. %s", old_value->value_nick);
+      if (!old_value)
+        continue;
+
+      current_value = g_enum_get_value_by_nick (current_class,
+                                                old_value->value_nick);
+
+      g_debug (" .. %s (%d)", old_value->value_nick, old_value->value);
       g_assert_nonnull (current_value);
       g_assert_cmpuint (old_value->value, ==, current_value->value);
     }
@@ -61,10 +69,13 @@ check_flags_compatibility (GType old_type, GType current_type)
   g_autoptr(GFlagsClass) current_class = g_type_class_ref (current_type);
   int i;
 
-  g_debug ("Checking Flags %s", g_type_name (current_type));
+  g_debug ("Checking Flags %s vs %s",
+           g_type_name (current_type),
+           g_type_name (old_type));
 
   g_assert_true (G_TYPE_IS_FLAGS (old_type));
   g_assert_true (G_TYPE_IS_FLAGS (current_type));
+  g_assert_cmpuint (old_class->n_values, <=, current_class->n_values);
 
   for (i = 0; i < old_class->n_values; ++i)
     {
@@ -72,7 +83,7 @@ check_flags_compatibility (GType old_type, GType current_type)
       GFlagsValue *current_value = g_flags_get_value_by_nick (current_class,
                                                               old_value->value_nick);
 
-      g_debug (" .. %s", old_value->value_nick);
+      g_debug (" .. %s (%d)", old_value->value_nick, old_value->value);
       g_assert_nonnull (current_value);
       g_assert_cmpuint (old_value->value, ==, current_value->value);
     }
