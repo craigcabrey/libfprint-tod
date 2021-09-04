@@ -248,13 +248,11 @@ if get_option('tod')
     tod_envs.prepend('LD_LIBRARY_PATH',
         meson.build_root() / 'libfprint',
         meson.build_root() / 'libfprint' / 'tod')
+    tod_subversion = meson.project_version().split('+tod')[0]
     tod_c_args = [
         '-DTEST_TOD_DRIVER=1',
         '-DTOD_CURRENT_VERSION=@0@'.format(tod_soversion),
-        '-DTOD_CURRENT_SUBVERSION="@0@.@1@"'.format(
-            meson.project_version().split('.')[0],
-            meson.project_version().split('.')[1],
-        ),
+        '-DTOD_CURRENT_SUBVERSION="@0@"'.format(tod_subversion),
     ]
 
     fake_driver = shared_module('device-fake-tod-driver',
@@ -314,8 +312,11 @@ if get_option('tod')
 
     if host_machine.cpu_family() == 'x86_64'
         tod_test_versions = [
-            'v1+1.90',
-            'v1+1.94',
+            'v1+1.90.1',
+            'v1+1.90.2',
+            'v1+1.90.3',
+            'v1+1.90.5',
+            'v1+1.94.0',
         ]
 
         foreach tod_version: tod_test_versions
