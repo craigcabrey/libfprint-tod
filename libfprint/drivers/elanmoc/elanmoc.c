@@ -25,6 +25,7 @@
 G_DEFINE_TYPE (FpiDeviceElanmoc, fpi_device_elanmoc, FP_TYPE_DEVICE)
 
 static const FpIdEntry id_table[] = {
+  { .vid = 0x04f3,  .pid = 0x0c7d,  },
   { .vid = 0x04f3,  .pid = 0x0c7e,  },
   { .vid = 0,  .pid = 0,  .driver_data = 0 },   /* terminating entry */
 };
@@ -806,7 +807,7 @@ elanmoc_enroll (FpDevice *device)
   FpPrint *print = NULL;
   GVariant *data = NULL;
   GVariant *uid = NULL;
-  g_autofree gchar *user_id;
+  g_autofree gchar *user_id = NULL;
   gsize user_id_len;
   guint8 *userdata = g_malloc0 (ELAN_USERDATE_SIZE);
 

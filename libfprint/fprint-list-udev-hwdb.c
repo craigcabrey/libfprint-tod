@@ -58,6 +58,7 @@ static const FpIdEntry whitelist_id_table[] = {
   { .vid = 0x0a5c, .pid = 0x5841 },
   { .vid = 0x0a5c, .pid = 0x5842 },
   { .vid = 0x0a5c, .pid = 0x5843 },
+  { .vid = 0x0a5c, .pid = 0x5844 },
   { .vid = 0x0a5c, .pid = 0x5845 },
   { .vid = 0x10a5, .pid = 0x0007 },
   { .vid = 0x1188, .pid = 0x9545 },
@@ -166,7 +167,10 @@ print_driver (const FpDeviceClass *cls)
     }
 
   if (num_printed > 0)
-    g_print (" ID_AUTOSUSPEND=1\n");
+    {
+      g_print (" ID_AUTOSUSPEND=1\n");
+      g_print (" ID_PERSIST=0\n");
+    }
 }
 
 static int
