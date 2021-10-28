@@ -14,12 +14,7 @@ global:
     fpi_device_class_auto_initialize_features;
     fpi_device_clear_storage_complete;
     fpi_device_get_udev_data;
-    fpi_device_remove;
-    fpi_device_report_finger_status;
-    fpi_device_report_finger_status_changes;
     fpi_device_update_features;
-    fpi_print_fill_from_user_id;
-    fpi_print_generate_user_id;
     fpi_spi_*;
     fpi_ssm_get_device;
     fpi_ssm_jump_to_state_delayed;
