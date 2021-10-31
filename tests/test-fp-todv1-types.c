@@ -193,6 +193,9 @@ test_device_type (void)
   check_struct_member (FpDeviceClass, 1, 94, 0, list);
   check_struct_member (FpDeviceClass, 1, 94, 0, delete);
   check_struct_member (FpDeviceClass, 1, 94, 0, cancel);
+  check_struct_member (FpDeviceClass, 1, 94, 0, clear_storage);
+  check_struct_member (FpDeviceClass, 1, 94, 0, suspend);
+  check_struct_member (FpDeviceClass, 1, 94, 0, resume);
 
   check_struct_member (FpDeviceClass, 1, 94, 0, id);
   check_struct_member (FpDeviceClass, 1, 94, 0, full_name);
@@ -203,6 +206,9 @@ test_device_type (void)
   check_struct_member (FpDeviceClass, 1, 94, 0, scan_type);
 
   check_struct_member (FpDeviceClass, 1, 94, 0, features);
+
+  check_struct_member (FpDeviceClass, 1, 94, 0, temp_hot_seconds);
+  check_struct_member (FpDeviceClass, 1, 94, 0, temp_cold_seconds);
 }
 
 static void
