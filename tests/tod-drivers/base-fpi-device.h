@@ -172,7 +172,13 @@ struct _FpIdEntryTODV1_92_0
 
   /*< private >*/
   /* padding for future expansion */
+#if GLIB_SIZEOF_VOID_P == 8
   gpointer _padding_dummy[13];
+#elif GLIB_SIZEOF_VOID_P == 4
+  gpointer _padding_dummy[11];
+#else
+  G_STATIC_ASSERT("Unexpected pointer size")
+#endif
 };
 
 typedef struct _FpIdEntryTODV1_92_0 FpIdEntryTODV1_92_0;
@@ -260,7 +266,13 @@ struct _FpDeviceClassTODV1_94_0
 
   /*< private >*/
   /* padding for future expansion */
+#if GLIB_SIZEOF_VOID_P == 8
   gpointer _padding_dummy[27];
+#elif GLIB_SIZEOF_VOID_P == 4
+  gpointer _padding_dummy[26];
+#else
+  G_STATIC_ASSERT("Unexpected pointer size")
+#endif
 };
 
 typedef struct _FpDeviceClassTODV1_94_0 FpDeviceClassTODV1_94_0;

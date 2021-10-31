@@ -73,7 +73,13 @@ struct _FpIdEntry
 
   /*< private >*/
   /* padding for future expansion */
+#if GLIB_SIZEOF_VOID_P == 8
   gpointer _padding_dummy[13];
+#elif GLIB_SIZEOF_VOID_P == 4
+  gpointer _padding_dummy[11];
+#else
+  G_STATIC_ASSERT("Unexpected pointer size")
+#endif
 };
 
 /**
@@ -186,7 +192,13 @@ struct _FpDeviceClass
 
   /*< private >*/
   /* padding for future expansion */
+#if GLIB_SIZEOF_VOID_P == 8
   gpointer _padding_dummy[27];
+#elif GLIB_SIZEOF_VOID_P == 4
+  gpointer _padding_dummy[26];
+#else
+  G_STATIC_ASSERT("Unexpected pointer size")
+#endif
 };
 
 void fpi_device_class_auto_initialize_features (FpDeviceClass *device_class);

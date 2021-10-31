@@ -109,13 +109,13 @@ check_compatiblity_auto (GType old_type, GType current_type)
   type ## TODV ## major ## _ ## minor ## _ ## micro
 
 #define check_struct_size(type, major, minor, micro) \
-  g_debug ("Checking " # type " size  @ " G_STRLOC); \
+  g_debug ("Checking " # type " v" #major "." #minor "." #micro " size  @ " G_STRLOC); \
   g_assert_cmpuint (sizeof (tod_versioned_type (type, major, minor, micro)), \
                     ==, \
                     sizeof (type))
 
 #define check_struct_member(type, major, minor, micro, member) \
-  g_debug ("Checking " # type "'s " # member " offset @ " G_STRLOC); \
+  g_debug ("Checking " # type " v" #major "." #minor "." #micro "'s " # member " offset @ " G_STRLOC); \
   g_assert_cmpuint (G_STRUCT_OFFSET (tod_versioned_type (type, major, minor, micro), member), \
                     ==, \
                     G_STRUCT_OFFSET (type, member))
