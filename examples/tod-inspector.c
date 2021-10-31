@@ -47,6 +47,24 @@ id_table_to_string (FpDeviceType     device_type,
           if (entry->vid)
             value = g_strdup_printf ("%04x:%04x", entry->vid, entry->pid);
         }
+      else if (device_type == FP_DEVICE_TYPE_UDEV)
+        {
+          if (entry->hid_id.vid)
+            {
+              g_autofree gchar *udev_flags = NULL;
+
+              udev_flags = g_flags_to_string (fpi_device_udev_subtype_flags_get_type (),
+                                              entry->udev_types);
+              value = g_strdup_printf ("%s (%04x:%04x) [%s]",
+                                       entry->spi_acpi_id,
+                                       entry->hid_id.vid, entry->hid_id.pid,
+                                       udev_flags);
+            }
+          else
+            {
+              value = g_strdup (entry->spi_acpi_id);
+            }
+        }
       else
         {
           return g_strdup ("Unsupported device type");
