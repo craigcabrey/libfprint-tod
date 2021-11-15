@@ -26,9 +26,11 @@
 #include "tod/tod-macros.h"
 
 /**
- * FpiDeviceUdevSubtype:
+ * FpiDeviceUdevSubtypeFlags:
  * @FPI_DEVICE_UDEV_SUBTYPE_SPIDEV: The device requires an spidev node
  * @FPI_DEVICE_UDEV_SUBTYPE_HIDRAW: The device requires a hidraw node
+ *
+ * Bitfield of required hardware resources for a udev-backed device.
  */
 typedef enum {
   FPI_DEVICE_UDEV_SUBTYPE_SPIDEV = 1 << 0,
