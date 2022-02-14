@@ -147,6 +147,10 @@ tod_check_device_version (FpDevice   *device_class,
 
 typedef FpDevice FpAutoCloseDevice;
 
+/* gcc 12.0.1 is complaining about dangling pointers in the auto_close* functions */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-pointer"
+
 static FpAutoCloseDevice *
 auto_close_fake_device_new (void)
 {
@@ -178,6 +182,8 @@ auto_close_fake_device_free (FpAutoCloseDevice *device)
   g_object_unref (device);
 }
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (FpAutoCloseDevice, auto_close_fake_device_free)
+
+#pragma GCC diagnostic pop
 
 typedef FpDeviceClass FpAutoResetClass;
 static FpAutoResetClass default_fake_dev_class = {0};
