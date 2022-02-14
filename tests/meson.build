@@ -325,6 +325,7 @@ if get_option('tod')
             'v1+1.90.3',
             'v1+1.90.5',
             'v1+1.94.0',
+            'v1+1.94.3',
         ]
 
         foreach tod_version: tod_test_versions
