@@ -747,11 +747,8 @@ fpi_device_action_error (FpDevice *device,
 
   if (error != NULL)
     {
-      g_autofree char *action_str = NULL;
-
-      action_str = g_enum_to_string (FPI_TYPE_DEVICE_ACTION, priv->current_action);
-      g_debug ("Device reported generic error (%s) during action; action was: %s",
-               error->message, action_str);
+      g_debug ("Device reported generic error (%s) during action; action was: %d",
+               error->message, priv->current_action);
     }
   else
     {
@@ -965,15 +962,13 @@ fp_device_task_return_in_idle_cb (gpointer user_data)
 {
   FpDeviceTaskReturnData *data = user_data;
   FpDevicePrivate *priv = fp_device_get_instance_private (data->device);
-  g_autofree char *action_str = NULL;
   FpiDeviceAction action;
 
   g_autoptr(GTask) task = NULL;
   g_autoptr(GError) cancellation_reason = NULL;
 
 
-  action_str = g_enum_to_string (FPI_TYPE_DEVICE_ACTION, priv->current_action);
-  g_debug ("Completing action %s in idle!", action_str);
+  g_debug ("Completing action %d in idle!", priv->current_action);
 
   task = g_steal_pointer (&priv->current_task);
   action = priv->current_action;
