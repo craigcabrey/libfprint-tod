@@ -22,6 +22,7 @@
 #include <gmodule.h>
 
 #include "tod-shared-loader.h"
+#include "tod-goodix-wrapper.h"
 #include "fpi-device.h"
 #include "fpi-log.h"
 #include "tod-config.h"
@@ -131,6 +132,9 @@ fpi_tod_shared_drivers_register (void)
         {
           g_debug ("Initializing features for driver %s", cls->id);
           fpi_device_class_auto_initialize_features (cls);
+
+          if (g_strcmp0 (cls->id, "goodix-tod") == 0)
+            goodix_tod_wrapper_init (cls);
         }
 
       shared_modules = g_list_prepend (shared_modules,

@@ -19,6 +19,7 @@ mapfile = configure_file(input: 'libfprint-tod.ver.in',
 libfprint_tod_private = static_library('fprint-tod-private',
     sources: [
         'tod-shared-loader.c',
+        'tod-goodix-wrapper.c',
     ],
     include_directories: include_directories('..'),
     link_with: libfprint_private,
