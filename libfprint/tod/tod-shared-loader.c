@@ -49,7 +49,7 @@ get_tod_drivers_dir (void)
 }
 
 void
-fpi_tod_shared_drivers_register (void)
+tod_shared_drivers_register (void)
 {
   const char *dirname;
   const char *basename;
@@ -143,7 +143,7 @@ fpi_tod_shared_drivers_register (void)
 }
 
 void
-fpi_tod_shared_drivers_unregister (void)
+tod_shared_drivers_unregister (void)
 {
   g_clear_pointer (&shared_drivers, g_array_unref);
 
@@ -155,7 +155,7 @@ fpi_tod_shared_drivers_unregister (void)
 }
 
 GArray *
-fpi_tod_shared_drivers_get (void)
+tod_shared_drivers_get (void)
 {
   return g_array_ref (shared_drivers);
 }

@@ -306,7 +306,7 @@ fp_context_finalize (GObject *object)
     g_object_run_dispose (G_OBJECT (priv->usb_ctx));
   g_clear_object (&priv->usb_ctx);
 
-  fpi_tod_shared_drivers_unregister ();
+  tod_shared_drivers_unregister ();
 
   G_OBJECT_CLASS (fp_context_parent_class)->finalize (object);
 }
@@ -371,8 +371,8 @@ fp_context_init (FpContext *self)
 
   priv->drivers = fpi_get_driver_types ();
 
-  fpi_tod_shared_drivers_register ();
-  shared_drivers = fpi_tod_shared_drivers_get ();
+  tod_shared_drivers_register ();
+  shared_drivers = tod_shared_drivers_get ();
   g_array_prepend_vals (priv->drivers, shared_drivers->data, shared_drivers->len);
 
   if (get_drivers_whitelist_env ())

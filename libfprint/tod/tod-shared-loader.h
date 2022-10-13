@@ -22,7 +22,7 @@
 #include <glib.h>
 
 
-void fpi_tod_shared_drivers_register (void);
-void fpi_tod_shared_drivers_unregister (void);
+void tod_shared_drivers_register (void);
+void tod_shared_drivers_unregister (void);
 
-GArray *fpi_tod_shared_drivers_get (void);
+GArray *tod_shared_drivers_get (void);
