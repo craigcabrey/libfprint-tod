@@ -35,7 +35,7 @@ foreach source: libfprint_private_sources
     tod_sources += '..' / source
 endforeach
 
-libfprint_tod = library(versioned_libname.split('lib')[1] + '-tod',
+libfprint_tod = shared_library(versioned_libname.split('lib')[1] + '-tod',
     c_args: [
         '-DTOD_LIBRARY=1',
         '-include', '@0@'.format(files('tod-symbols.h')[0]),
@@ -50,7 +50,7 @@ libfprint_tod = library(versioned_libname.split('lib')[1] + '-tod',
         '-Wl,--unresolved-symbols=ignore-in-object-files'
     ],
     link_depends: mapfile,
-    link_with: [libfprint_private],
+    link_whole: [libfprint_tod_private],
     dependencies: deps,
     install: true)
 
@@ -104,3 +104,7 @@ install_headers(tod_headers,
 install_headers(tod_local_headers,
     subdir: tod_subpath / 'tod',
 )
+
+# Replace the libfprint private instance with the TOD one in this case as we
+# contain already all the symbols.
+libfprint_private = libfprint_tod
