@@ -392,4 +392,15 @@ if get_option('tod')
             )
         endif
     endforeach
+
+    if find_program('objdump', required: false).found()
+        check_libs_symbols = find_program(meson.source_root() /
+            'libfprint/tod/tests/check-library-symbols.sh')
+        test('check-tod-lib-sybmbols',
+            check_libs_symbols,
+            args: [libfprint.full_path(), libfprint_tod.full_path()],
+            depends: [libfprint, libfprint_tod],
+            suite: ['abi-check', tod_suites ],
+        )
+    endif
 endif
