@@ -23,7 +23,7 @@
 
 #include "tod-goodix-wrapper.h"
 
-static void (*goodix_moc_identify) (FpDevice *) = NULL;
+static void (*goodix_moc_identify)(FpDevice *) = NULL;
 
 static void
 goodix_tod_identify_wrapper (FpDevice *device)
