@@ -225,6 +225,7 @@ fp_device_finalize (GObject *object)
 
   g_clear_pointer (&priv->current_idle_cancel_source, g_source_destroy);
   g_clear_pointer (&priv->current_task_idle_return_source, g_source_destroy);
+  g_clear_pointer (&priv->critical_section_flush_source, g_source_destroy);
 
   g_clear_pointer (&priv->device_id, g_free);
   g_clear_pointer (&priv->device_name, g_free);
@@ -948,16 +949,6 @@ fp_device_close_finish (FpDevice     *device,
   return g_task_propagate_boolean (G_TASK (result), error);
 }
 
-static void
-complete_suspend_resume_task (FpDevice *device)
-{
-  FpDevicePrivate *priv = fp_device_get_instance_private (device);
-
-  g_assert (priv->suspend_resume_task);
-
-  g_task_return_boolean (g_steal_pointer (&priv->suspend_resume_task), TRUE);
-}
-
 /**
  * fp_device_suspend:
  * @device: a #FpDevice
@@ -1008,48 +999,7 @@ fp_device_suspend (FpDevice           *device,
 
   priv->suspend_resume_task = g_steal_pointer (&task);
 
-  /* If the device is currently idle, just complete immediately.
-   * For long running tasks, call the driver handler right away, for short
-   * tasks, wait for completion and then return the task.
-   */
-  switch (priv->current_action)
-    {
-    case FPI_DEVICE_ACTION_NONE:
-      fpi_device_suspend_complete (device, NULL);
-      break;
-
-    case FPI_DEVICE_ACTION_ENROLL:
-    case FPI_DEVICE_ACTION_VERIFY:
-    case FPI_DEVICE_ACTION_IDENTIFY:
-    case FPI_DEVICE_ACTION_CAPTURE:
-      if (FP_DEVICE_GET_CLASS (device)->suspend)
-        {
-          if (priv->critical_section)
-            priv->suspend_queued = TRUE;
-          else
-            FP_DEVICE_GET_CLASS (device)->suspend (device);
-        }
-      else
-        {
-          fpi_device_suspend_complete (device, fpi_device_error_new (FP_DEVICE_ERROR_NOT_SUPPORTED));
-        }
-      break;
-
-    default:
-    case FPI_DEVICE_ACTION_PROBE:
-    case FPI_DEVICE_ACTION_OPEN:
-    case FPI_DEVICE_ACTION_CLOSE:
-    case FPI_DEVICE_ACTION_DELETE:
-    case FPI_DEVICE_ACTION_LIST:
-    case FPI_DEVICE_ACTION_CLEAR_STORAGE:
-      g_signal_connect_object (priv->current_task,
-                               "notify::completed",
-                               G_CALLBACK (complete_suspend_resume_task),
-                               device,
-                               G_CONNECT_SWAPPED);
-
-      break;
-    }
+  fpi_device_suspend (device);
 }
 
 /**
@@ -1114,41 +1064,7 @@ fp_device_resume (FpDevice           *device,
 
   priv->suspend_resume_task = g_steal_pointer (&task);
 
-  switch (priv->current_action)
-    {
-    case FPI_DEVICE_ACTION_NONE:
-      fpi_device_resume_complete (device, NULL);
-      break;
-
-    case FPI_DEVICE_ACTION_ENROLL:
-    case FPI_DEVICE_ACTION_VERIFY:
-    case FPI_DEVICE_ACTION_IDENTIFY:
-    case FPI_DEVICE_ACTION_CAPTURE:
-      if (FP_DEVICE_GET_CLASS (device)->resume)
-        {
-          if (priv->critical_section)
-            priv->resume_queued = TRUE;
-          else
-            FP_DEVICE_GET_CLASS (device)->resume (device);
-        }
-      else
-        {
-          fpi_device_resume_complete (device, fpi_device_error_new (FP_DEVICE_ERROR_NOT_SUPPORTED));
-        }
-      break;
-
-    default:
-    case FPI_DEVICE_ACTION_PROBE:
-    case FPI_DEVICE_ACTION_OPEN:
-    case FPI_DEVICE_ACTION_CLOSE:
-    case FPI_DEVICE_ACTION_DELETE:
-    case FPI_DEVICE_ACTION_LIST:
-    case FPI_DEVICE_ACTION_CLEAR_STORAGE:
-      /* cannot happen as we make sure these tasks complete before suspend */
-      g_assert_not_reached ();
-      complete_suspend_resume_task (device);
-      break;
-    }
+  fpi_device_resume (device);
 }
 
 /**
@@ -1265,10 +1181,6 @@ fp_device_enroll (FpDevice           *device,
         }
     }
 
-  priv->current_action = FPI_DEVICE_ACTION_ENROLL;
-  priv->current_task = g_steal_pointer (&task);
-  setup_task_cancellable (device);
-
   fpi_device_update_temp (device, TRUE);
   if (priv->temp_current == FP_TEMPERATURE_HOT)
     {
@@ -1276,6 +1188,10 @@ fp_device_enroll (FpDevice           *device,
       fpi_device_update_temp (device, FALSE);
       return;
     }
+
+  priv->current_action = FPI_DEVICE_ACTION_ENROLL;
+  priv->current_task = g_steal_pointer (&task);
+  setup_task_cancellable (device);
 
   data = g_new0 (FpEnrollData, 1);
   data->print = g_object_ref_sink (template_print);
@@ -1383,10 +1299,6 @@ fp_device_verify (FpDevice           *device,
       return;
     }
 
-  priv->current_action = FPI_DEVICE_ACTION_VERIFY;
-  priv->current_task = g_steal_pointer (&task);
-  setup_task_cancellable (device);
-
   fpi_device_update_temp (device, TRUE);
   if (priv->temp_current == FP_TEMPERATURE_HOT)
     {
@@ -1394,6 +1306,10 @@ fp_device_verify (FpDevice           *device,
       fpi_device_update_temp (device, FALSE);
       return;
     }
+
+  priv->current_action = FPI_DEVICE_ACTION_VERIFY;
+  priv->current_task = g_steal_pointer (&task);
+  setup_task_cancellable (device);
 
   data = g_new0 (FpMatchData, 1);
   data->enrolled_print = g_object_ref (enrolled_print);
@@ -1510,9 +1426,13 @@ fp_device_identify (FpDevice           *device,
       return;
     }
 
-  priv->current_action = FPI_DEVICE_ACTION_IDENTIFY;
-  priv->current_task = g_steal_pointer (&task);
-  setup_task_cancellable (device);
+  if (prints == NULL)
+    {
+      g_task_return_error (task,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_DATA_INVALID,
+                                                     "Invalid gallery array"));
+      return;
+    }
 
   fpi_device_update_temp (device, TRUE);
   if (priv->temp_current == FP_TEMPERATURE_HOT)
@@ -1521,6 +1441,10 @@ fp_device_identify (FpDevice           *device,
       fpi_device_update_temp (device, FALSE);
       return;
     }
+
+  priv->current_action = FPI_DEVICE_ACTION_IDENTIFY;
+  priv->current_task = g_steal_pointer (&task);
+  setup_task_cancellable (device);
 
   data = g_new0 (FpMatchData, 1);
   /* We cannot store the gallery directly, because the ptr array may not own
@@ -1635,10 +1559,6 @@ fp_device_capture (FpDevice           *device,
       return;
     }
 
-  priv->current_action = FPI_DEVICE_ACTION_CAPTURE;
-  priv->current_task = g_steal_pointer (&task);
-  setup_task_cancellable (device);
-
   fpi_device_update_temp (device, TRUE);
   if (priv->temp_current == FP_TEMPERATURE_HOT)
     {
@@ -1646,6 +1566,10 @@ fp_device_capture (FpDevice           *device,
       fpi_device_update_temp (device, FALSE);
       return;
     }
+
+  priv->current_action = FPI_DEVICE_ACTION_CAPTURE;
+  priv->current_task = g_steal_pointer (&task);
+  setup_task_cancellable (device);
 
   priv->wait_for_finger = wait_for_finger;
 

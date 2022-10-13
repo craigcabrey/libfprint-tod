@@ -295,11 +295,10 @@ fp_context_finalize (GObject *object)
   FpContext *self = (FpContext *) object;
   FpContextPrivate *priv = fp_context_get_instance_private (self);
 
-  g_clear_pointer (&priv->devices, g_ptr_array_unref);
-
   g_cancellable_cancel (priv->cancellable);
   g_clear_object (&priv->cancellable);
   g_clear_pointer (&priv->drivers, g_array_unref);
+  g_clear_pointer (&priv->devices, g_ptr_array_unref);
 
   g_slist_free_full (g_steal_pointer (&priv->sources), (GDestroyNotify) g_source_destroy);
 
@@ -367,6 +366,8 @@ fp_context_init (FpContext *self)
   g_autoptr(GArray) shared_drivers = NULL;
   FpContextPrivate *priv = fp_context_get_instance_private (self);
   guint i;
+
+  g_debug ("Initializing FpContext (libfprint version " LIBFPRINT_VERSION ")");
 
   priv->drivers = fpi_get_driver_types ();
 

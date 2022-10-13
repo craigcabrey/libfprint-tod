@@ -126,6 +126,10 @@ typedef struct
   GDestroyNotify match_destroy;
 } FpMatchData;
 
+
+void fpi_device_suspend (FpDevice *device);
+void fpi_device_resume (FpDevice *device);
+
 void fpi_device_configure_wakeup (FpDevice *device,
                                   gboolean  enabled);
 void fpi_device_update_temp (FpDevice *device,
