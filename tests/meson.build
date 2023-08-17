@@ -131,7 +131,6 @@ if get_option('introspection')
                             'LD_LIBRARY_PATH=' + installed_tests_libdir,
                             'FP_PRINTS_PATH=' + installed_tests_testdir / 'prints',
                             # FIXME: Adding this requires gnome-desktop-testing!12
-                            # 'GI_TYPELIB_PATH=' + installed_tests_libdir / 'girepository-1.0',
                         ]),
                         'extra_content': '',
                     },
@@ -444,7 +443,7 @@ if get_option('tod')
         ]
 
         foreach tod_version: tod_test_versions
-            tod_dir = meson.current_source_dir() / 'tod-drivers' / '-'.join([
+            tod_dir = 'tod-drivers' / '-'.join([
                 'tod', host_machine.cpu_family(), tod_version
             ])
             tod_driver_infos += {
@@ -464,6 +463,11 @@ if get_option('tod')
                     ],
                 }
             }
+
+            if installed_tests
+                install_subdir(tod_dir,
+                    install_dir: installed_tests_execdir / 'tod-drivers')
+            endif
         endforeach
     endif
 
@@ -479,6 +483,8 @@ if get_option('tod')
                 common_cflags,
                 tod_c_args,
             ],
+            install: installed_tests,
+            install_dir: installed_tests_execdir,
             link_with: test_utils_tod,
         )
 
@@ -488,7 +494,8 @@ if get_option('tod')
             endif
             tod_test_envs = tod_envs
             tod_test_envs.prepend('FP_DRIVERS_WHITELIST', tod_driver)
-            tod_test_envs.set('FP_TOD_DRIVERS_DIR', tod_driver_info.get('tod-dir'))
+            tod_test_envs.set('FP_TOD_DRIVERS_DIR', meson.current_source_dir() /
+                tod_driver_info.get('tod-dir'))
             tod_test_envs.set('FP_TOD_TEST_DRIVER_NAME', tod_driver)
 
             test(tod_test_name + '-' + tod_driver,
@@ -497,6 +504,28 @@ if get_option('tod')
                 env: tod_test_envs,
                 depends: fake_driver,
             )
+
+            if installed_tests
+                tod_envs_str = run_command(python3, '-c', env_parser_cmd,
+                    env: tod_test_envs,
+                    check: true).stdout().strip()
+
+                configure_file(
+                    input: 'test.in',
+                    output: 'tod-' + tod_test_name + '-' + tod_driver + '.test',
+                    install_dir: installed_tests_testdir,
+                    configuration: {
+                        # FIXME: use fs.name() on meson 0.58
+                        'exec': installed_tests_execdir / test_exe.full_path().split('/')[-1],
+                        'env': ' '.join([
+                            tod_envs_str,
+                            'FP_TOD_DRIVERS_DIR=' + installed_tests_execdir /
+                                tod_driver_info.get('tod-dir'),
+                        ]),
+                        'extra_content': '',
+                    },
+                )
+            endif
         endforeach
 
         if test_name in tod_standalone_tests
