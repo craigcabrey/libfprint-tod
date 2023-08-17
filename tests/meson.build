@@ -131,6 +131,7 @@ if get_option('introspection')
                             'LD_LIBRARY_PATH=' + installed_tests_libdir,
                             'FP_PRINTS_PATH=' + installed_tests_testdir / 'prints',
                             # FIXME: Adding this requires gnome-desktop-testing!12
+                            # 'GI_TYPELIB_PATH=' + installed_tests_libdir / 'girepository-1.0',
                         ]),
                         'extra_content': '',
                     },
@@ -389,7 +390,8 @@ if get_option('tod')
         ],
         include_directories: include_directories('../libfprint'),
         dependencies: deps,
-        install: false
+        install: installed_tests,
+        install_dir: installed_tests_execdir / 'tod-drivers' / 'current',
     )
 
     fp_todv1_enums = gnome.mkenums_simple('fp-todv1-enums',
@@ -494,8 +496,10 @@ if get_option('tod')
             endif
             tod_test_envs = tod_envs
             tod_test_envs.prepend('FP_DRIVERS_WHITELIST', tod_driver)
-            tod_test_envs.set('FP_TOD_DRIVERS_DIR', meson.current_source_dir() /
-                tod_driver_info.get('tod-dir'))
+            tod_test_envs.set('FP_TOD_DRIVERS_DIR',
+                tod_driver_info.get('tod-dir') == meson.current_build_dir() ?
+                meson.current_build_dir() :
+                meson.current_source_dir() / tod_driver_info.get('tod-dir'))
             tod_test_envs.set('FP_TOD_TEST_DRIVER_NAME', tod_driver)
 
             test(tod_test_name + '-' + tod_driver,
@@ -520,7 +524,8 @@ if get_option('tod')
                         'env': ' '.join([
                             tod_envs_str,
                             'FP_TOD_DRIVERS_DIR=' + installed_tests_execdir /
-                                tod_driver_info.get('tod-dir'),
+                                (tod_driver_info.get('tod-dir') == meson.current_build_dir() ?
+                                'tod-drivers' / 'current' : tod_driver_info.get('tod-dir')),
                         ]),
                         'extra_content': '',
                     },
