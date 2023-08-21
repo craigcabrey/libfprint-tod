@@ -396,6 +396,7 @@ if get_option('tod')
         dependencies: deps,
         install: installed_tests,
         install_dir: installed_tests_execdir / 'tod-drivers' / 'current',
+        install_rpath: installed_tests_execdir,
     )
 
     fp_todv1_enums = gnome.mkenums_simple('fp-todv1-enums',
