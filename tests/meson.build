@@ -504,7 +504,7 @@ if get_option('tod')
                 continue
             endif
             tod_test_envs = tod_envs
-            tod_test_envs.prepend('FP_DRIVERS_WHITELIST', tod_driver)
+            tod_test_envs.prepend('FP_DRIVERS_ALLOWLIST', tod_driver)
             tod_test_envs.set('FP_TOD_DRIVERS_DIR',
                 tod_driver_info.get('tod-dir') == meson.current_build_dir() ?
                 meson.current_build_dir() :
