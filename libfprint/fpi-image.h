@@ -25,6 +25,7 @@
 
 /**
  * FpiImageFlags:
+ * @FPI_IMAGE_NONE: no flag set
  * @FPI_IMAGE_V_FLIPPED: the image is vertically flipped
  * @FPI_IMAGE_H_FLIPPED: the image is horizontally flipped
  * @FPI_IMAGE_COLORS_INVERTED: the colours are inverted
