@@ -34,6 +34,7 @@
  * rely on the image to be normalized by libfprint before further processing.
  */
 typedef enum {
+  FPI_IMAGE_NONE            = 0,
   FPI_IMAGE_V_FLIPPED       = 1 << 0,
   FPI_IMAGE_H_FLIPPED       = 1 << 1,
   FPI_IMAGE_COLORS_INVERTED = 1 << 2,
@@ -68,9 +69,12 @@ struct _FpImage
   guint8    *binarized;
 
   GPtrArray *minutiae;
+  /* Unused */
   guint      ref_count;
 
-  TOD_PADDING (32, 0);
+  gboolean   detection_in_progress;
+
+  TOD_PADDING (32, sizeof (gboolean));
 };
 
 gint fpi_std_sq_dev (const guint8 *buf,

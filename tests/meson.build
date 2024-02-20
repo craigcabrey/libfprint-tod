@@ -15,7 +15,7 @@ envs.prepend('LD_LIBRARY_PATH', meson.project_build_root() / 'libfprint')
 envs.set('FP_DEVICE_EMULATION', '1')
 
 # Set a colon-separated list of native drivers we enable in tests
-envs.set('FP_DRIVERS_WHITELIST', ':'.join([
+envs.set('FP_DRIVERS_ALLOWLIST', ':'.join([
     'virtual_image',
     'virtual_device',
     'virtual_device_storage',
@@ -51,7 +51,11 @@ drivers_tests = [
     'goodixmoc',
     'nb1010',
     'egis0570',
+    'egismoc',
+    'egismoc-05a1',
     'fpcmoc',
+    'realtek',
+    'focaltech_moc',
 ]
 
 if get_option('introspection')
@@ -157,7 +161,7 @@ if get_option('introspection')
     foreach driver_test: drivers_tests
         driver_name = driver_test.split('-')[0]
         driver_envs = envs
-        driver_envs.set('FP_DRIVERS_WHITELIST', driver_name)
+        driver_envs.set('FP_DRIVERS_ALLOWLIST', driver_name)
 
         if (driver_name in supported_drivers and
             gusb_dep.version().version_compare('>= 0.3.0'))
@@ -335,7 +339,7 @@ endif
 
 valgrind = find_program('valgrind', required: false)
 if valgrind.found()
-    glib_share = glib_dep.get_pkgconfig_variable('prefix') / 'share' / glib_dep.name()
+    glib_share = glib_dep.get_variable(pkgconfig: 'prefix') / 'share' / glib_dep.name()
     glib_suppressions = glib_share + '/valgrind/glib.supp'
     libfprint_suppressions = '@0@/@1@'.format(meson.project_source_root(),
         files('libfprint.supp')[0])
